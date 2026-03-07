@@ -1,0 +1,7 @@
+{
+  "name": "Akira - UK Retirement Coach",
+  "description": "An interactive voice app that helps users visualize and plan their retirement through a natural, voice-first conversation.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
