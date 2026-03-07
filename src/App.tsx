@@ -81,12 +81,20 @@ export default function App() {
     const saved = localStorage.getItem('akira_history');
     return saved ? JSON.parse(saved) : [];
   });
+  const [liveTranscript, setLiveTranscript] = useState<{role: 'user' | 'model', text: string} | null>(null);
   
   const sessionRef = useRef<any>(null);
   const audioRecorderRef = useRef<AudioRecorder | null>(null);
   const audioStreamerRef = useRef<AudioStreamer | null>(null);
   const currentInputRef = useRef<string>('');
   const currentOutputRef = useRef<string>('');
+  const transcriptEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (transcriptEndRef.current) {
+      transcriptEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [history, liveTranscript]);
 
   const clearHistory = () => {
     localStorage.removeItem('akira_history');
@@ -136,7 +144,10 @@ export default function App() {
           onmessage: async (message: LiveServerMessage) => {
             if (message.serverContent?.inputTranscription) {
               const t = message.serverContent.inputTranscription;
-              if (t.text) currentInputRef.current += t.text;
+              if (t.text) {
+                currentInputRef.current += t.text;
+                setLiveTranscript({ role: 'user', text: currentInputRef.current });
+              }
               if (t.finished && currentInputRef.current.trim()) {
                 setHistory(prev => {
                   const newHistory = [...prev, { role: 'user', parts: [{ text: currentInputRef.current }] }];
@@ -144,11 +155,15 @@ export default function App() {
                   return newHistory;
                 });
                 currentInputRef.current = '';
+                setLiveTranscript(null);
               }
             }
             if (message.serverContent?.outputTranscription) {
               const t = message.serverContent.outputTranscription;
-              if (t.text) currentOutputRef.current += t.text;
+              if (t.text) {
+                currentOutputRef.current += t.text;
+                setLiveTranscript({ role: 'model', text: currentOutputRef.current });
+              }
               if (t.finished && currentOutputRef.current.trim()) {
                 setHistory(prev => {
                   const newHistory = [...prev, { role: 'model', parts: [{ text: currentOutputRef.current }] }];
@@ -156,6 +171,7 @@ export default function App() {
                   return newHistory;
                 });
                 currentOutputRef.current = '';
+                setLiveTranscript(null);
               }
             }
 
@@ -177,6 +193,7 @@ export default function App() {
                   return newHistory;
                 });
                 currentOutputRef.current = '';
+                setLiveTranscript(null);
               }
             }
             if (message.toolCall) {
@@ -403,7 +420,7 @@ export default function App() {
           </motion.div>
         )}
 
-        {history.length > 0 && !finaleData && (
+        {(history.length > 0 || liveTranscript) && !finaleData && (
           <div className="w-full max-w-2xl mx-auto space-y-6 bg-white p-6 rounded-3xl shadow-sm border border-olive/10">
             <h3 className="text-xl font-serif text-olive text-center mb-6">Conversation History</h3>
             <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
@@ -427,7 +444,28 @@ export default function App() {
                     </div>
                   </motion.div>
                 ))}
+                {liveTranscript && (
+                  <motion.div
+                    key="live-transcript"
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ duration: 0.3 }}
+                    className={`flex ${liveTranscript.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div 
+                      className={`max-w-[80%] p-4 rounded-2xl ${
+                        liveTranscript.role === 'user' 
+                          ? 'bg-olive/80 text-white rounded-br-sm' 
+                          : 'bg-warm-white/80 text-gray-800 rounded-bl-sm border border-olive/10'
+                      }`}
+                    >
+                      <p className="text-sm leading-relaxed">{liveTranscript.text}</p>
+                      <span className="inline-block w-1.5 h-4 ml-1 bg-current animate-pulse align-middle" />
+                    </div>
+                  </motion.div>
+                )}
               </AnimatePresence>
+              <div ref={transcriptEndRef} />
             </div>
           </div>
         )}
