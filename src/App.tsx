@@ -22,6 +22,7 @@ Rules of Engagement:
 - Interactive: After every 2 pieces of data collected, give a "mini-insight" to keep the user engaged.
 - Be concise. Do not list all questions at once. Ask naturally.
 - Visuals: If the user asks to see a projection or forecast of their savings, use the \`calculateRetirementProjection\` tool to show them a chart.
+- Snapshot: Whenever you learn or update the user's age, target retirement age, pension balance, ISA balance, home equity, or monthly "fun money", call the \`updateSnapshot\` tool to keep their dashboard current.
 
 The Grand Finale:
 Once ALL data is collected, you MUST call the \`triggerGrandFinale\` tool.
@@ -72,11 +73,31 @@ const calculateRetirementProjectionDeclaration = {
   }
 };
 
+const updateSnapshotDeclaration = {
+  name: "updateSnapshot",
+  description: "Updates the user's retirement snapshot with new information learned during the conversation.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      currentAge: { type: Type.NUMBER, description: "User's current age" },
+      targetAge: { type: Type.NUMBER, description: "Target retirement age" },
+      pensionTotal: { type: Type.NUMBER, description: "Total pension balance" },
+      isaTotal: { type: Type.NUMBER, description: "Total ISA balance" },
+      homeEquity: { type: Type.STRING, description: "Home ownership status or equity" },
+      monthlyFunMoney: { type: Type.NUMBER, description: "Monthly 'fun money' or lifestyle costs" }
+    }
+  }
+};
+
 export default function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [finaleData, setFinaleData] = useState<any>(null);
   const [projectionData, setProjectionData] = useState<any[] | null>(null);
+  const [snapshot, setSnapshot] = useState<any>(() => {
+    const saved = localStorage.getItem('akira_snapshot');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [history, setHistory] = useState<any[]>(() => {
     const saved = localStorage.getItem('akira_history');
     return saved ? JSON.parse(saved) : [];
@@ -98,7 +119,9 @@ export default function App() {
 
   const clearHistory = () => {
     localStorage.removeItem('akira_history');
+    localStorage.removeItem('akira_snapshot');
     setHistory([]);
+    setSnapshot(null);
   };
 
   const connect = async () => {
@@ -117,7 +140,7 @@ export default function App() {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } },
           },
           systemInstruction: SYSTEM_INSTRUCTION,
-          tools: [{ functionDeclarations: [triggerGrandFinaleDeclaration, calculateRetirementProjectionDeclaration] }],
+          tools: [{ functionDeclarations: [triggerGrandFinaleDeclaration, calculateRetirementProjectionDeclaration, updateSnapshotDeclaration] }],
           inputAudioTranscription: {},
           outputAudioTranscription: {},
         },
@@ -267,6 +290,22 @@ export default function App() {
                         }]
                       });
                     });
+                  } else if (call.name === 'updateSnapshot') {
+                    const args = call.args as any;
+                    setSnapshot((prev: any) => {
+                      const newSnapshot = { ...prev, ...args, lastSessionDate: new Date().toLocaleDateString() };
+                      localStorage.setItem('akira_snapshot', JSON.stringify(newSnapshot));
+                      return newSnapshot;
+                    });
+                    sessionPromise.then(session => {
+                      session.sendToolResponse({
+                        functionResponses: [{
+                          id: call.id,
+                          name: call.name,
+                          response: { status: "success" }
+                        }]
+                      });
+                    });
                   }
                 }
               }
@@ -313,162 +352,233 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-warm-white flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="w-full max-w-4xl space-y-12">
-        <div className="text-center space-y-4">
-          <h1 className="text-5xl md:text-6xl font-serif text-olive">Akira</h1>
-          <p className="text-lg text-olive-light font-medium tracking-wide uppercase">Your UK Retirement Coach</p>
-        </div>
+    <div className="min-h-screen bg-warm-white py-12 px-4 sm:px-6 lg:px-8 flex justify-center">
+      <div className="w-full max-w-6xl space-y-12">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+          {/* Left Column */}
+          <div className="space-y-12 flex flex-col">
+            <div className="text-center lg:text-left space-y-4">
+              <h1 className="text-5xl md:text-6xl font-serif text-olive">Akira</h1>
+              <p className="text-lg text-olive-light font-medium tracking-wide uppercase">Your UK Retirement Coach</p>
+            </div>
 
-        <div className="flex flex-col items-center justify-center py-12 space-y-8">
-          {!isConnected && !isConnecting ? (
-            <div className="flex flex-col items-center space-y-16">
-              <motion.button 
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={connect}
-                className="group relative flex items-center justify-center w-32 h-32 rounded-full bg-olive text-white shadow-xl hover:bg-olive-light transition-colors duration-300 cursor-pointer"
-              >
-                <Mic size={40} className="group-hover:scale-110 transition-transform" />
-                <div className="absolute -bottom-12 text-olive font-medium whitespace-nowrap">
-                  {history.length > 0 ? 'Resume Session' : 'Tap to Start'}
+            <div className="flex flex-col items-center lg:items-start justify-center py-12 space-y-8">
+              {!isConnected && !isConnecting ? (
+                <div className="flex flex-col items-center lg:items-start space-y-16">
+                  <motion.button 
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={connect}
+                    className="group relative flex items-center justify-center w-32 h-32 rounded-full bg-olive text-white shadow-xl hover:bg-olive-light transition-colors duration-300 cursor-pointer"
+                  >
+                    <Mic size={40} className="group-hover:scale-110 transition-transform" />
+                    <div className="absolute -bottom-12 text-olive font-medium whitespace-nowrap">
+                      {history.length > 0 ? 'Resume Session' : 'Tap to Start'}
+                    </div>
+                  </motion.button>
+                  
+                  {history.length > 0 && (
+                    <button 
+                      onClick={clearHistory}
+                      className="text-sm text-olive-light hover:text-red-600 transition-colors underline underline-offset-4"
+                    >
+                      Clear History & Start Fresh
+                    </button>
+                  )}
                 </div>
-              </motion.button>
-              
-              {history.length > 0 && (
-                <button 
-                  onClick={clearHistory}
-                  className="text-sm text-olive-light hover:text-red-600 transition-colors underline underline-offset-4"
-                >
-                  Clear History & Start Fresh
-                </button>
+              ) : isConnecting ? (
+                <div className="flex flex-col items-center lg:items-start space-y-4">
+                  <Loader2 size={48} className="text-olive animate-spin" />
+                  <div className="text-olive font-medium">Waking up Akira...</div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center lg:items-start space-y-8">
+                  <div className="relative flex items-center justify-center w-40 h-40">
+                    <div className="absolute inset-0 rounded-full bg-olive opacity-20 animate-ping"></div>
+                    <div className="absolute inset-4 rounded-full bg-olive opacity-40 animate-pulse"></div>
+                    <motion.button 
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={disconnect}
+                      className="relative z-10 flex items-center justify-center w-24 h-24 rounded-full bg-olive text-white shadow-lg hover:bg-red-600 transition-colors cursor-pointer"
+                    >
+                      <Square size={24} fill="currentColor" />
+                    </motion.button>
+                  </div>
+                  <div className="text-olive font-medium text-lg">Akira is listening...</div>
+                </div>
               )}
             </div>
-          ) : isConnecting ? (
-            <div className="flex flex-col items-center space-y-4">
-              <Loader2 size={48} className="text-olive animate-spin" />
-              <div className="text-olive font-medium">Waking up Akira...</div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center space-y-8">
-              <div className="relative flex items-center justify-center w-40 h-40">
-                <div className="absolute inset-0 rounded-full bg-olive opacity-20 animate-ping"></div>
-                <div className="absolute inset-4 rounded-full bg-olive opacity-40 animate-pulse"></div>
-                <motion.button 
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={disconnect}
-                  className="relative z-10 flex items-center justify-center w-24 h-24 rounded-full bg-olive text-white shadow-lg hover:bg-red-600 transition-colors cursor-pointer"
-                >
-                  <Square size={24} fill="currentColor" />
-                </motion.button>
+
+            {projectionData && !finaleData && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="w-full bg-white p-6 rounded-3xl shadow-sm border border-olive/10"
+              >
+                <div className="flex items-center space-x-3 text-olive mb-6 justify-center">
+                  <TrendingUp size={24} />
+                  <h3 className="text-xl font-serif">Retirement Projection</h3>
+                </div>
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={projectionData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#5A5A40" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#5A5A40" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E5E5" />
+                      <XAxis 
+                        dataKey="age" 
+                        tickLine={false} 
+                        axisLine={false} 
+                        tick={{ fill: '#8E9299', fontSize: 12 }} 
+                        tickFormatter={(value) => `Age ${value}`}
+                      />
+                      <YAxis 
+                        tickLine={false} 
+                        axisLine={false} 
+                        tick={{ fill: '#8E9299', fontSize: 12 }}
+                        tickFormatter={(value) => `£${(value / 1000).toFixed(0)}k`}
+                      />
+                      <Tooltip 
+                        formatter={(value: number) => [`£${value.toLocaleString()}`, 'Projected Balance']}
+                        labelFormatter={(label) => `Age ${label}`}
+                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="balance" 
+                        stroke="#5A5A40" 
+                        strokeWidth={3}
+                        fillOpacity={1} 
+                        fill="url(#colorBalance)" 
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </motion.div>
+            )}
+
+            {(history.length > 0 || liveTranscript) && !finaleData && (
+              <div className="w-full space-y-6 bg-white p-6 rounded-3xl shadow-sm border border-olive/10">
+                <h3 className="text-xl font-serif text-olive text-center mb-6">Conversation History</h3>
+                <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                  <AnimatePresence initial={false}>
+                    {history.map((msg, idx) => (
+                      <motion.div
+                        key={idx}
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ duration: 0.3 }}
+                        className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div 
+                          className={`max-w-[80%] p-4 rounded-2xl ${
+                            msg.role === 'user' 
+                              ? 'bg-olive text-white rounded-br-sm' 
+                              : 'bg-warm-white text-gray-800 rounded-bl-sm border border-olive/10'
+                          }`}
+                        >
+                          <p className="text-sm leading-relaxed">{msg.parts[0].text}</p>
+                        </div>
+                      </motion.div>
+                    ))}
+                    {liveTranscript && (
+                      <motion.div
+                        key="live-transcript"
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ duration: 0.3 }}
+                        className={`flex ${liveTranscript.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div 
+                          className={`max-w-[80%] p-4 rounded-2xl ${
+                            liveTranscript.role === 'user' 
+                              ? 'bg-olive/80 text-white rounded-br-sm' 
+                              : 'bg-warm-white/80 text-gray-800 rounded-bl-sm border border-olive/10'
+                          }`}
+                        >
+                          <p className="text-sm leading-relaxed">{liveTranscript.text}</p>
+                          <span className="inline-block w-1.5 h-4 ml-1 bg-current animate-pulse align-middle" />
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  <div ref={transcriptEndRef} />
+                </div>
               </div>
-              <div className="text-olive font-medium text-lg">Akira is listening...</div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
-        {projectionData && !finaleData && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="w-full max-w-2xl mx-auto bg-white p-6 rounded-3xl shadow-sm border border-olive/10"
-          >
-            <div className="flex items-center space-x-3 text-olive mb-6 justify-center">
-              <TrendingUp size={24} />
-              <h3 className="text-xl font-serif">Retirement Projection</h3>
-            </div>
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={projectionData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#5A5A40" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#5A5A40" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E5E5" />
-                  <XAxis 
-                    dataKey="age" 
-                    tickLine={false} 
-                    axisLine={false} 
-                    tick={{ fill: '#8E9299', fontSize: 12 }} 
-                    tickFormatter={(value) => `Age ${value}`}
-                  />
-                  <YAxis 
-                    tickLine={false} 
-                    axisLine={false} 
-                    tick={{ fill: '#8E9299', fontSize: 12 }}
-                    tickFormatter={(value) => `£${(value / 1000).toFixed(0)}k`}
-                  />
-                  <Tooltip 
-                    formatter={(value: number) => [`£${value.toLocaleString()}`, 'Projected Balance']}
-                    labelFormatter={(label) => `Age ${label}`}
-                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="balance" 
-                    stroke="#5A5A40" 
-                    strokeWidth={3}
-                    fillOpacity={1} 
-                    fill="url(#colorBalance)" 
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </motion.div>
-        )}
+          {/* Right Column */}
+          <div className="space-y-6 lg:pt-[120px]">
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-olive/10 sticky top-12">
+              <h3 className="text-2xl font-serif text-olive mb-6">Retirement Snapshot</h3>
+              
+              {!snapshot ? (
+                <div className="space-y-4 text-gray-600">
+                  <p className="font-medium text-olive">What Akira can do for you:</p>
+                  <ul className="space-y-3">
+                    <li className="flex items-start space-x-3">
+                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-olive/10 text-olive flex items-center justify-center text-sm font-medium">1</div>
+                      <span>Listen to your retirement goals</span>
+                    </li>
+                    <li className="flex items-start space-x-3">
+                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-olive/10 text-olive flex items-center justify-center text-sm font-medium">2</div>
+                      <span>Estimate whether you're broadly on track</span>
+                    </li>
+                    <li className="flex items-start space-x-3">
+                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-olive/10 text-olive flex items-center justify-center text-sm font-medium">3</div>
+                      <span>Suggest next steps for pensions, ISAs, and lifestyle</span>
+                    </li>
+                    <li className="flex items-start space-x-3">
+                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-olive/10 text-olive flex items-center justify-center text-sm font-medium">4</div>
+                      <span>Create a vision-board style image of your retirement</span>
+                    </li>
+                  </ul>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-warm-white p-4 rounded-2xl">
+                      <div className="text-sm text-olive-light mb-1">Current Age</div>
+                      <div className="text-2xl font-serif text-olive">{snapshot.currentAge || '--'}</div>
+                    </div>
+                    <div className="bg-warm-white p-4 rounded-2xl">
+                      <div className="text-sm text-olive-light mb-1">Target Age</div>
+                      <div className="text-2xl font-serif text-olive">{snapshot.targetAge || '--'}</div>
+                    </div>
+                    <div className="bg-warm-white p-4 rounded-2xl">
+                      <div className="text-sm text-olive-light mb-1">Pension Total</div>
+                      <div className="text-2xl font-serif text-olive">{snapshot.pensionTotal ? `£${snapshot.pensionTotal.toLocaleString()}` : '--'}</div>
+                    </div>
+                    <div className="bg-warm-white p-4 rounded-2xl">
+                      <div className="text-sm text-olive-light mb-1">ISA Total</div>
+                      <div className="text-2xl font-serif text-olive">{snapshot.isaTotal ? `£${snapshot.isaTotal.toLocaleString()}` : '--'}</div>
+                    </div>
+                    <div className="bg-warm-white p-4 rounded-2xl">
+                      <div className="text-sm text-olive-light mb-1">Home Equity</div>
+                      <div className="text-lg font-medium text-olive">{snapshot.homeEquity || '--'}</div>
+                    </div>
+                    <div className="bg-warm-white p-4 rounded-2xl">
+                      <div className="text-sm text-olive-light mb-1">Fun Money / mo</div>
+                      <div className="text-2xl font-serif text-olive">{snapshot.monthlyFunMoney ? `£${snapshot.monthlyFunMoney.toLocaleString()}` : '--'}</div>
+                    </div>
+                  </div>
 
-        {(history.length > 0 || liveTranscript) && !finaleData && (
-          <div className="w-full max-w-2xl mx-auto space-y-6 bg-white p-6 rounded-3xl shadow-sm border border-olive/10">
-            <h3 className="text-xl font-serif text-olive text-center mb-6">Conversation History</h3>
-            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
-              <AnimatePresence initial={false}>
-                {history.map((msg, idx) => (
-                  <motion.div
-                    key={idx}
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{ duration: 0.3 }}
-                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div 
-                      className={`max-w-[80%] p-4 rounded-2xl ${
-                        msg.role === 'user' 
-                          ? 'bg-olive text-white rounded-br-sm' 
-                          : 'bg-warm-white text-gray-800 rounded-bl-sm border border-olive/10'
-                      }`}
-                    >
-                      <p className="text-sm leading-relaxed">{msg.parts[0].text}</p>
+                  {snapshot.lastSessionDate && (
+                    <div className="text-xs text-center text-olive-light pt-4 border-t border-olive/10">
+                      Last updated: {snapshot.lastSessionDate}
                     </div>
-                  </motion.div>
-                ))}
-                {liveTranscript && (
-                  <motion.div
-                    key="live-transcript"
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{ duration: 0.3 }}
-                    className={`flex ${liveTranscript.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div 
-                      className={`max-w-[80%] p-4 rounded-2xl ${
-                        liveTranscript.role === 'user' 
-                          ? 'bg-olive/80 text-white rounded-br-sm' 
-                          : 'bg-warm-white/80 text-gray-800 rounded-bl-sm border border-olive/10'
-                      }`}
-                    >
-                      <p className="text-sm leading-relaxed">{liveTranscript.text}</p>
-                      <span className="inline-block w-1.5 h-4 ml-1 bg-current animate-pulse align-middle" />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-              <div ref={transcriptEndRef} />
+                  )}
+                </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
 
         <AnimatePresence>
           {finaleData && (
