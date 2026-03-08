@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI, Type, LiveServerMessage, Modality } from '@google/genai';
-import { Mic, Square, Loader2, Sparkles, Target, TrendingUp } from 'lucide-react';
+import { Mic, Square, Loader2, Sparkles, Target, TrendingUp, Settings, User } from 'lucide-react';
 import { AudioRecorder, AudioStreamer } from './lib/audio';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
@@ -402,14 +402,45 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-warm-white py-12 px-4 sm:px-6 lg:px-8 flex justify-center">
-      <div className="w-full max-w-6xl space-y-12">
+    <div className="min-h-screen bg-warm-white py-12 px-4 sm:px-6 lg:px-8 flex justify-center relative overflow-hidden">
+      {/* Soft, de-focused countryside background */}
+      <div 
+        className="absolute inset-0 z-0"
+        style={{
+          backgroundImage: 'url("https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1920&auto=format&fit=crop")',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          filter: 'blur(12px)',
+          opacity: 0.4
+        }}
+      />
+      <div className="absolute inset-0 z-0 bg-warm-white/60" />
+
+      <div className="w-full max-w-6xl space-y-12 relative z-10">
+        {/* Top Bar */}
+        <div className="flex items-center justify-between py-4 border-b border-olive/10">
+          <button className="text-olive hover:text-olive-light font-medium transition-colors text-sm uppercase tracking-wider">
+            About Akira
+          </button>
+          <div className="flex items-center space-x-4">
+            <button className="p-2 text-olive hover:bg-olive/10 rounded-full transition-colors" aria-label="Profile">
+              <User size={20} />
+            </button>
+            <button className="p-2 text-olive hover:bg-olive/10 rounded-full transition-colors" aria-label="Settings">
+              <Settings size={20} />
+            </button>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
           {/* Left Column */}
           <div className="space-y-10 flex flex-col">
             <div className="text-left space-y-4">
               <h1 className="text-5xl md:text-6xl font-serif text-olive">Akira</h1>
-              <p className="text-lg text-olive-light font-medium tracking-wide uppercase">Your UK Retirement Coach</p>
+              <div className="space-y-1">
+                <p className="text-lg text-olive-light font-medium tracking-wide uppercase">Your UK Retirement Coach</p>
+                <p className="text-gray-600 text-lg">Create a simple, spoken retirement plan in 5 minutes.</p>
+              </div>
             </div>
 
             <div className="flex flex-col items-start justify-start space-y-8">
