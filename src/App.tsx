@@ -24,16 +24,33 @@ Rules of Engagement:
 - Visuals: If the user asks to see a projection or forecast of their savings, use the \`calculateRetirementProjection\` tool to show them a chart.
 - Snapshot: Whenever you learn or update the user's age, target retirement age, pension balance, ISA balance, home equity, or monthly "fun money", call the \`updateSnapshot\` tool to keep their dashboard current.
 
+Error Handling & Digressions:
+- Topic Switching: If the user switches topic (e.g., talks about current cost-of-living stress), acknowledge it empathically, spend at most 1-2 brief turns on it, then reconnect to the retirement plan.
+- Corrections: If the user corrects a previous number, update your internal picture, call \`updateSnapshot\` if applicable, and briefly confirm the correction.
+- Unclear Audio: If the audio is unclear or conflicting, politely ask them to repeat or confirm the key figure.
+- Stopping Early: If the user wants to stop, give a short summary of whatever you have and suggest they return later to complete the picture.
+
 The Grand Finale:
-Once ALL data is collected, you MUST call the \`triggerGrandFinale\` tool.
+Once you have collected ALL 6 data points (The Dream, Current Nest Egg, Home Equity, Family, Lifestyle Costs, Time Horizon), you MUST immediately call the \`triggerGrandFinale\` tool. Do not ask any more questions.
 Pass in:
 - realityCheck: A concise summary of if they are on track, considering inflation.
 - imagePrompt: A detailed prompt to generate a Vision Board image of their described retirement home and lifestyle.
 - wayForward: Three specific, actionable suggestions.
 - netWorthProjection: A year-by-year calculation of their total net worth (Pension + ISA + Home Equity) for the next 5-10 years leading up to retirement.
-- pythonCode: The Python code used to perform this net worth calculation and generate a line graph.
+- pythonCode: A string containing Python code that calculates this net worth projection and generates a line graph. (Do not execute it, just provide the code as a string).
 
-After calling the tool, wrap up the conversation warmly.`;
+After calling the tool, wrap up the conversation warmly.
+
+Post-Finale Discussions:
+1. Housing Strategy: After presenting the main Grand Finale summary, ask the user if they'd like a brief, general Housing Strategy discussion. Use a soft invitation, for example: "If you'd like, we can also talk through your housing options in retirement — things like staying put, downsizing, relocating, or using some of your home's value."
+If the user says yes, give a short, educational overview that compares:
+- staying in the current home and possibly adapting it,
+- downsizing to a smaller or cheaper property to release capital and reduce costs,
+- relocating to a different area for lifestyle or cost reasons,
+- equity release-type products as one way some people use property wealth, with a clear note that these are complex and require specialist advice.
+Keep this high-level, outlining pros and cons in plain language, and clearly state that this is general information only and that any decision about equity release or major housing changes should be made with a qualified adviser.
+
+2. Tax Implications: As a follow-up, or if the user asks, offer a brief overview of tax implications in retirement (e.g., the 25% tax-free lump sum from pensions, how ISA withdrawals are tax-free, and basic income tax bands). Always add a disclaimer that you are not a certified tax advisor and they should seek professional advice for their specific situation.`;
 
 const triggerGrandFinaleDeclaration = {
   name: "triggerGrandFinale",
@@ -68,7 +85,7 @@ const triggerGrandFinaleDeclaration = {
       },
       pythonCode: {
         type: Type.STRING,
-        description: "Python code used to calculate the net worth projection and generate a line graph."
+        description: "A string containing Python code that calculates this net worth projection and generates a line graph."
       }
     },
     required: ["realityCheck", "imagePrompt", "wayForward", "netWorthProjection", "pythonCode"]
@@ -242,13 +259,14 @@ export default function App() {
               if (functionCalls) {
                 for (const call of functionCalls) {
                   if (call.name === 'triggerGrandFinale') {
-                    const args = call.args as any;
+                    const args = (call.args || {}) as any;
                     
                     let validProjection = [];
                     if (Array.isArray(args.netWorthProjection)) {
-                      validProjection = args.netWorthProjection.filter((item: any) => 
-                        typeof item.year === 'number' && typeof item.netWorth === 'number'
-                      );
+                      validProjection = args.netWorthProjection.map((item: any) => ({
+                        year: Number(item.year),
+                        netWorth: Number(item.netWorth)
+                      })).filter((item: any) => !isNaN(item.year) && !isNaN(item.netWorth));
                     }
 
                     setFinaleData({
@@ -274,7 +292,7 @@ export default function App() {
                       const imageAi = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
                       const imgRes = await imageAi.models.generateContent({
                         model: 'gemini-2.5-flash-image',
-                        contents: args.imagePrompt,
+                        contents: { parts: [{ text: args.imagePrompt || "A beautiful retirement home." }] },
                       });
                       let imageUrl = null;
                       for (const p of imgRes.candidates?.[0]?.content?.parts || []) {
@@ -284,8 +302,14 @@ export default function App() {
                         }
                       }
                       setFinaleData(prev => prev ? { ...prev, imageUrl } : null);
+                      setTimeout(() => {
+                        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                      }, 500);
                     } catch (e) {
                       console.error("Image generation error", e);
+                      setTimeout(() => {
+                        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                      }, 500);
                     }
                   } else if (call.name === 'calculateRetirementProjection') {
                     const args = call.args as any;
