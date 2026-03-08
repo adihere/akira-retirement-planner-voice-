@@ -145,6 +145,8 @@ export default function App() {
   const currentInputRef = useRef<string>('');
   const currentOutputRef = useRef<string>('');
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const lastInputTimeRef = useRef<number | null>(null);
+  const lastUserTextRef = useRef<string>('');
 
   useEffect(() => {
     if (transcriptEndRef.current) {
@@ -174,7 +176,7 @@ export default function App() {
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } },
           },
-          systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+          systemInstruction: SYSTEM_INSTRUCTION,
           tools: [{ functionDeclarations: [triggerGrandFinaleDeclaration, calculateRetirementProjectionDeclaration, updateSnapshotDeclaration] }],
           inputAudioTranscription: {},
           outputAudioTranscription: {},
@@ -186,7 +188,11 @@ export default function App() {
             
             sessionPromise.then(session => {
               if (history.length > 0) {
-                session.sendClientContent({ turns: history, turnComplete: true });
+                const historyText = history.map(h => `${h.role}: ${h.parts[0].text}`).join('\n');
+                session.sendClientContent({ 
+                  turns: [{ role: 'user', parts: [{ text: `Here is our conversation history so far:\n${historyText}` }] }], 
+                  turnComplete: true 
+                });
               }
             });
             
@@ -207,6 +213,8 @@ export default function App() {
                 setLiveTranscript({ role: 'user', text: currentInputRef.current });
               }
               if (t.finished && currentInputRef.current.trim()) {
+                lastInputTimeRef.current = Date.now();
+                lastUserTextRef.current = currentInputRef.current;
                 setHistory(prev => {
                   const newHistory = [...prev, { role: 'user', parts: [{ text: currentInputRef.current }] }];
                   localStorage.setItem('akira_history', JSON.stringify(newHistory));
@@ -219,10 +227,24 @@ export default function App() {
             if (message.serverContent?.outputTranscription) {
               const t = message.serverContent.outputTranscription;
               if (t.text) {
+                if (currentOutputRef.current === '' && lastInputTimeRef.current) {
+                  const latency = Date.now() - lastInputTimeRef.current;
+                  console.log(`[LATENCY] Model response started in ${latency}ms`);
+                }
                 currentOutputRef.current += t.text;
                 setLiveTranscript({ role: 'model', text: currentOutputRef.current });
               }
               if (t.finished && currentOutputRef.current.trim()) {
+                if (lastInputTimeRef.current) {
+                  const totalLatency = Date.now() - lastInputTimeRef.current;
+                  console.log(JSON.stringify({
+                    event: 'eval_log',
+                    latencyMs: totalLatency,
+                    userText: lastUserTextRef.current,
+                    modelText: currentOutputRef.current,
+                    timestamp: new Date().toISOString()
+                  }));
+                }
                 setHistory(prev => {
                   const newHistory = [...prev, { role: 'model', parts: [{ text: currentOutputRef.current }] }];
                   localStorage.setItem('akira_history', JSON.stringify(newHistory));
@@ -258,6 +280,12 @@ export default function App() {
               const functionCalls = message.toolCall.functionCalls;
               if (functionCalls) {
                 for (const call of functionCalls) {
+                  console.log(JSON.stringify({
+                    event: 'tool_call',
+                    toolName: call.name,
+                    args: call.args,
+                    timestamp: new Date().toISOString()
+                  }));
                   if (call.name === 'triggerGrandFinale') {
                     const args = (call.args || {}) as any;
                     
@@ -312,7 +340,7 @@ export default function App() {
                       }, 500);
                     }
                   } else if (call.name === 'calculateRetirementProjection') {
-                    const args = call.args as any;
+                    const args = (call.args || {}) as any;
                     
                     const currentAge = typeof args.currentAge === 'number' && args.currentAge > 0 ? args.currentAge : 30;
                     const retirementAge = typeof args.retirementAge === 'number' && args.retirementAge > currentAge ? args.retirementAge : currentAge + 20;
@@ -330,9 +358,11 @@ export default function App() {
                         age: currentAge + year,
                         balance: Math.round(balance)
                       });
-                      // Calculate next year's balance
-                      for (let month = 0; month < 12; month++) {
-                        balance = balance * (1 + monthlyRate) + monthlyContribution;
+                      if (year < years) {
+                        // Calculate next year's balance
+                        for (let month = 0; month < 12; month++) {
+                          balance = balance * (1 + monthlyRate) + monthlyContribution;
+                        }
                       }
                     }
 
@@ -348,7 +378,7 @@ export default function App() {
                       });
                     });
                   } else if (call.name === 'updateSnapshot') {
-                    const args = call.args as any;
+                    const args = (call.args || {}) as any;
                     const validatedArgs: any = {};
                     if (typeof args.currentAge === 'number' && args.currentAge > 0) validatedArgs.currentAge = args.currentAge;
                     if (typeof args.targetAge === 'number' && args.targetAge > 0) validatedArgs.targetAge = args.targetAge;
@@ -386,7 +416,7 @@ export default function App() {
         }
       });
       
-      sessionRef.current = await sessionPromise;
+      sessionRef.current = sessionPromise;
       
     } catch (error) {
       console.error("Connection failed:", error);
@@ -405,7 +435,11 @@ export default function App() {
       audioStreamerRef.current = null;
     }
     if (sessionRef.current) {
-      sessionRef.current.close();
+      if (typeof sessionRef.current.then === 'function') {
+        sessionRef.current.then((session: any) => session.close());
+      } else {
+        sessionRef.current.close();
+      }
       sessionRef.current = null;
     }
     setIsConnected(false);

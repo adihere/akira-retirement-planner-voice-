@@ -70,6 +70,7 @@ export class AudioRecorder {
 export class AudioStreamer {
   audioContext: AudioContext;
   nextStartTime: number = 0;
+  sources: AudioBufferSourceNode[] = [];
 
   constructor() {
     this.audioContext = new AudioContext({ sampleRate: 24000 });
@@ -102,6 +103,12 @@ export class AudioStreamer {
         this.nextStartTime = currentTime;
     }
     source.start(this.nextStartTime);
+    this.sources.push(source);
+    
+    source.onended = () => {
+      this.sources = this.sources.filter(s => s !== source);
+    };
+
     this.nextStartTime += audioBuffer.duration;
   }
 
@@ -112,10 +119,10 @@ export class AudioStreamer {
   }
   
   interrupt() {
-     if (this.audioContext.state !== 'closed') {
-         this.audioContext.close();
-     }
-     this.audioContext = new AudioContext({ sampleRate: 24000 });
-     this.nextStartTime = 0;
+     this.sources.forEach(source => {
+       try { source.stop(); } catch (e) {}
+     });
+     this.sources = [];
+     this.nextStartTime = this.audioContext.currentTime;
   }
 }
