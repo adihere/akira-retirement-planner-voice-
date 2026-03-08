@@ -354,17 +354,17 @@ export default function App() {
   return (
     <div className="min-h-screen bg-warm-white py-12 px-4 sm:px-6 lg:px-8 flex justify-center">
       <div className="w-full max-w-6xl space-y-12">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
           {/* Left Column */}
-          <div className="space-y-12 flex flex-col">
-            <div className="text-center lg:text-left space-y-4">
+          <div className="space-y-10 flex flex-col">
+            <div className="text-left space-y-4">
               <h1 className="text-5xl md:text-6xl font-serif text-olive">Akira</h1>
               <p className="text-lg text-olive-light font-medium tracking-wide uppercase">Your UK Retirement Coach</p>
             </div>
 
-            <div className="flex flex-col items-center lg:items-start justify-center py-12 space-y-8">
+            <div className="flex flex-col items-start justify-start space-y-8">
               {!isConnected && !isConnecting ? (
-                <div className="flex flex-col items-center lg:items-start space-y-16">
+                <div className="flex flex-col items-start space-y-6">
                   <motion.button 
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
@@ -372,35 +372,37 @@ export default function App() {
                     className="group relative flex items-center justify-center w-32 h-32 rounded-full bg-olive text-white shadow-xl hover:bg-olive-light transition-colors duration-300 cursor-pointer"
                   >
                     <Mic size={40} className="group-hover:scale-110 transition-transform" />
-                    <div className="absolute -bottom-12 text-olive font-medium whitespace-nowrap">
-                      {history.length > 0 ? 'Resume Session' : 'Tap to Start'}
-                    </div>
                   </motion.button>
                   
-                  {history.length > 0 && (
-                    <button 
-                      onClick={clearHistory}
-                      className="text-sm text-olive-light hover:text-red-600 transition-colors underline underline-offset-4"
-                    >
-                      Clear History & Start Fresh
-                    </button>
-                  )}
+                  <div className="flex flex-col items-start space-y-2">
+                    <div className="text-olive font-medium text-xl">
+                      {history.length > 0 ? 'Resume Session' : 'Tap to Start'}
+                    </div>
+                    {history.length > 0 && (
+                      <button 
+                        onClick={clearHistory}
+                        className="text-sm text-olive-light hover:text-red-600 transition-colors underline underline-offset-4"
+                      >
+                        Clear History & Start Fresh
+                      </button>
+                    )}
+                  </div>
                 </div>
               ) : isConnecting ? (
-                <div className="flex flex-col items-center lg:items-start space-y-4">
+                <div className="flex flex-col items-start space-y-4">
                   <Loader2 size={48} className="text-olive animate-spin" />
                   <div className="text-olive font-medium">Waking up Akira...</div>
                 </div>
               ) : (
-                <div className="flex flex-col items-center lg:items-start space-y-8">
-                  <div className="relative flex items-center justify-center w-40 h-40">
+                <div className="flex flex-col items-start space-y-8">
+                  <div className="relative flex items-center justify-center w-32 h-32">
                     <div className="absolute inset-0 rounded-full bg-olive opacity-20 animate-ping"></div>
                     <div className="absolute inset-4 rounded-full bg-olive opacity-40 animate-pulse"></div>
                     <motion.button 
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={disconnect}
-                      className="relative z-10 flex items-center justify-center w-24 h-24 rounded-full bg-olive text-white shadow-lg hover:bg-red-600 transition-colors cursor-pointer"
+                      className="relative z-10 flex items-center justify-center w-20 h-20 rounded-full bg-olive text-white shadow-lg hover:bg-red-600 transition-colors cursor-pointer"
                     >
                       <Square size={24} fill="currentColor" />
                     </motion.button>
@@ -514,7 +516,7 @@ export default function App() {
           </div>
 
           {/* Right Column */}
-          <div className="space-y-6 lg:pt-[120px]">
+          <div className="space-y-6">
             <div className="bg-white p-8 rounded-3xl shadow-sm border border-olive/10 sticky top-12">
               <h3 className="text-2xl font-serif text-olive mb-6">Retirement Snapshot</h3>
               
