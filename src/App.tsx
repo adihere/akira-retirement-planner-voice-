@@ -59,9 +59,10 @@ const triggerGrandFinaleDeclaration = {
         items: {
           type: Type.OBJECT,
           properties: {
-            year: { type: Type.NUMBER },
-            netWorth: { type: Type.NUMBER }
-          }
+            year: { type: Type.NUMBER, description: "Year" },
+            netWorth: { type: Type.NUMBER, description: "Net worth" }
+          },
+          required: ["year", "netWorth"]
         },
         description: "Year-by-year net worth projection data."
       },
@@ -156,7 +157,7 @@ export default function App() {
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } },
           },
-          systemInstruction: SYSTEM_INSTRUCTION,
+          systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
           tools: [{ functionDeclarations: [triggerGrandFinaleDeclaration, calculateRetirementProjectionDeclaration, updateSnapshotDeclaration] }],
           inputAudioTranscription: {},
           outputAudioTranscription: {},
@@ -242,12 +243,20 @@ export default function App() {
                 for (const call of functionCalls) {
                   if (call.name === 'triggerGrandFinale') {
                     const args = call.args as any;
+                    
+                    let validProjection = [];
+                    if (Array.isArray(args.netWorthProjection)) {
+                      validProjection = args.netWorthProjection.filter((item: any) => 
+                        typeof item.year === 'number' && typeof item.netWorth === 'number'
+                      );
+                    }
+
                     setFinaleData({
-                      realityCheck: args.realityCheck,
-                      imagePrompt: args.imagePrompt,
-                      wayForward: args.wayForward,
-                      netWorthProjection: args.netWorthProjection,
-                      pythonCode: args.pythonCode,
+                      realityCheck: typeof args.realityCheck === 'string' ? args.realityCheck : "Here is your reality check.",
+                      imagePrompt: typeof args.imagePrompt === 'string' ? args.imagePrompt : "A beautiful retirement home.",
+                      wayForward: Array.isArray(args.wayForward) ? args.wayForward.filter((s: any) => typeof s === 'string') : [],
+                      netWorthProjection: validProjection,
+                      pythonCode: typeof args.pythonCode === 'string' ? args.pythonCode : "# Calculation logic",
                       imageUrl: null
                     });
                     
@@ -280,7 +289,12 @@ export default function App() {
                     }
                   } else if (call.name === 'calculateRetirementProjection') {
                     const args = call.args as any;
-                    const { currentAge, retirementAge, currentSavings, monthlyContribution, expectedAnnualReturn } = args;
+                    
+                    const currentAge = typeof args.currentAge === 'number' && args.currentAge > 0 ? args.currentAge : 30;
+                    const retirementAge = typeof args.retirementAge === 'number' && args.retirementAge > currentAge ? args.retirementAge : currentAge + 20;
+                    const currentSavings = typeof args.currentSavings === 'number' && args.currentSavings >= 0 ? args.currentSavings : 0;
+                    const monthlyContribution = typeof args.monthlyContribution === 'number' && args.monthlyContribution >= 0 ? args.monthlyContribution : 0;
+                    const expectedAnnualReturn = typeof args.expectedAnnualReturn === 'number' && args.expectedAnnualReturn >= 0 ? args.expectedAnnualReturn : 5;
                     
                     const years = retirementAge - currentAge;
                     const data = [];
@@ -311,8 +325,16 @@ export default function App() {
                     });
                   } else if (call.name === 'updateSnapshot') {
                     const args = call.args as any;
+                    const validatedArgs: any = {};
+                    if (typeof args.currentAge === 'number' && args.currentAge > 0) validatedArgs.currentAge = args.currentAge;
+                    if (typeof args.targetAge === 'number' && args.targetAge > 0) validatedArgs.targetAge = args.targetAge;
+                    if (typeof args.pensionTotal === 'number' && args.pensionTotal >= 0) validatedArgs.pensionTotal = args.pensionTotal;
+                    if (typeof args.isaTotal === 'number' && args.isaTotal >= 0) validatedArgs.isaTotal = args.isaTotal;
+                    if (typeof args.homeEquity === 'string') validatedArgs.homeEquity = args.homeEquity;
+                    if (typeof args.monthlyFunMoney === 'number' && args.monthlyFunMoney >= 0) validatedArgs.monthlyFunMoney = args.monthlyFunMoney;
+
                     setSnapshot((prev: any) => {
-                      const newSnapshot = { ...prev, ...args, lastSessionDate: new Date().toLocaleDateString() };
+                      const newSnapshot = { ...prev, ...validatedArgs, lastSessionDate: new Date().toLocaleDateString() };
                       localStorage.setItem('akira_snapshot', JSON.stringify(newSnapshot));
                       return newSnapshot;
                     });
@@ -370,6 +392,15 @@ export default function App() {
     return () => disconnect();
   }, []);
 
+  const formatCurrency = (value: number | undefined | null) => {
+    if (value === undefined || value === null) return '--';
+    return new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency: 'GBP',
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
+
   return (
     <div className="min-h-screen bg-warm-white py-12 px-4 sm:px-6 lg:px-8 flex justify-center">
       <div className="w-full max-w-6xl space-y-12">
@@ -387,7 +418,7 @@ export default function App() {
                   <motion.button 
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    onClick={connect}
+                    onClick={() => { clearHistory(); connect(); }}
                     className="group relative flex items-center justify-center w-32 h-32 rounded-full bg-olive text-white shadow-xl hover:bg-olive-light transition-colors duration-300 cursor-pointer"
                   >
                     <Mic size={40} className="group-hover:scale-110 transition-transform" />
@@ -395,16 +426,8 @@ export default function App() {
                   
                   <div className="flex flex-col items-start space-y-2">
                     <div className="text-olive font-medium text-xl">
-                      {history.length > 0 ? 'Resume Session' : 'Tap to Start'}
+                      Start New Session
                     </div>
-                    {history.length > 0 && (
-                      <button 
-                        onClick={clearHistory}
-                        className="text-sm text-olive-light hover:text-red-600 transition-colors underline underline-offset-4"
-                      >
-                        Clear History & Start Fresh
-                      </button>
-                    )}
                   </div>
                 </div>
               ) : isConnecting ? (
@@ -465,7 +488,7 @@ export default function App() {
                         tickFormatter={(value) => `£${(value / 1000).toFixed(0)}k`}
                       />
                       <Tooltip 
-                        formatter={(value: number) => [`£${value.toLocaleString()}`, 'Projected Balance']}
+                        formatter={(value: number) => [formatCurrency(value), 'Projected Balance']}
                         labelFormatter={(label) => `Age ${label}`}
                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}
                       />
@@ -574,11 +597,11 @@ export default function App() {
                     </div>
                     <div className="bg-warm-white p-4 rounded-2xl">
                       <div className="text-sm text-olive-light mb-1">Pension Total</div>
-                      <div className="text-2xl font-serif text-olive">{snapshot.pensionTotal ? `£${snapshot.pensionTotal.toLocaleString()}` : '--'}</div>
+                      <div className="text-2xl font-serif text-olive">{formatCurrency(snapshot.pensionTotal)}</div>
                     </div>
                     <div className="bg-warm-white p-4 rounded-2xl">
                       <div className="text-sm text-olive-light mb-1">ISA Total</div>
-                      <div className="text-2xl font-serif text-olive">{snapshot.isaTotal ? `£${snapshot.isaTotal.toLocaleString()}` : '--'}</div>
+                      <div className="text-2xl font-serif text-olive">{formatCurrency(snapshot.isaTotal)}</div>
                     </div>
                     <div className="bg-warm-white p-4 rounded-2xl">
                       <div className="text-sm text-olive-light mb-1">Home Equity</div>
@@ -586,7 +609,7 @@ export default function App() {
                     </div>
                     <div className="bg-warm-white p-4 rounded-2xl">
                       <div className="text-sm text-olive-light mb-1">Fun Money / mo</div>
-                      <div className="text-2xl font-serif text-olive">{snapshot.monthlyFunMoney ? `£${snapshot.monthlyFunMoney.toLocaleString()}` : '--'}</div>
+                      <div className="text-2xl font-serif text-olive">{formatCurrency(snapshot.monthlyFunMoney)}</div>
                     </div>
                   </div>
 
@@ -684,7 +707,7 @@ export default function App() {
                             tickFormatter={(value) => `£${(value / 1000).toFixed(0)}k`}
                           />
                           <Tooltip 
-                            formatter={(value: number) => [`£${value.toLocaleString()}`, 'Total Net Worth']}
+                            formatter={(value: number) => [formatCurrency(value), 'Total Net Worth']}
                             labelFormatter={(label) => `Year ${label}`}
                             contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}
                           />
