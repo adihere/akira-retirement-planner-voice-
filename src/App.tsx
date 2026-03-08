@@ -30,6 +30,8 @@ Pass in:
 - realityCheck: A concise summary of if they are on track, considering inflation.
 - imagePrompt: A detailed prompt to generate a Vision Board image of their described retirement home and lifestyle.
 - wayForward: Three specific, actionable suggestions.
+- netWorthProjection: A year-by-year calculation of their total net worth (Pension + ISA + Home Equity) for the next 5-10 years leading up to retirement.
+- pythonCode: The Python code used to perform this net worth calculation and generate a line graph.
 
 After calling the tool, wrap up the conversation warmly.`;
 
@@ -51,9 +53,24 @@ const triggerGrandFinaleDeclaration = {
         type: Type.ARRAY,
         items: { type: Type.STRING },
         description: "Three specific, actionable suggestions for their retirement plan."
+      },
+      netWorthProjection: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            year: { type: Type.NUMBER },
+            netWorth: { type: Type.NUMBER }
+          }
+        },
+        description: "Year-by-year net worth projection data."
+      },
+      pythonCode: {
+        type: Type.STRING,
+        description: "Python code used to calculate the net worth projection and generate a line graph."
       }
     },
-    required: ["realityCheck", "imagePrompt", "wayForward"]
+    required: ["realityCheck", "imagePrompt", "wayForward", "netWorthProjection", "pythonCode"]
   }
 };
 
@@ -229,6 +246,8 @@ export default function App() {
                       realityCheck: args.realityCheck,
                       imagePrompt: args.imagePrompt,
                       wayForward: args.wayForward,
+                      netWorthProjection: args.netWorthProjection,
+                      pythonCode: args.pythonCode,
                       imageUrl: null
                     });
                     
@@ -632,6 +651,66 @@ export default function App() {
                         </li>
                       ))}
                     </ul>
+                  </div>
+                </div>
+
+                <div className="space-y-8 pt-8 border-t border-olive/10">
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-3 text-olive">
+                      <TrendingUp size={24} />
+                      <h3 className="text-2xl font-serif font-semibold">Net Worth Projection</h3>
+                    </div>
+                    <p className="text-gray-600">A projection of your total assets (Pension + ISA + Home Equity) leading up to retirement.</p>
+                    <div className="h-80 w-full bg-warm-white p-4 rounded-2xl">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={finaleData.netWorthProjection} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="colorNetWorth" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#5A5A40" stopOpacity={0.3}/>
+                              <stop offset="95%" stopColor="#5A5A40" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E5E5" />
+                          <XAxis 
+                            dataKey="year" 
+                            tickLine={false} 
+                            axisLine={false} 
+                            tick={{ fill: '#8E9299', fontSize: 12 }} 
+                          />
+                          <YAxis 
+                            tickLine={false} 
+                            axisLine={false} 
+                            tick={{ fill: '#8E9299', fontSize: 12 }}
+                            tickFormatter={(value) => `£${(value / 1000).toFixed(0)}k`}
+                          />
+                          <Tooltip 
+                            formatter={(value: number) => [`£${value.toLocaleString()}`, 'Total Net Worth']}
+                            labelFormatter={(label) => `Year ${label}`}
+                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}
+                          />
+                          <Area 
+                            type="monotone" 
+                            dataKey="netWorth" 
+                            stroke="#5A5A40" 
+                            strokeWidth={3}
+                            fillOpacity={1} 
+                            fill="url(#colorNetWorth)" 
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-3 text-olive">
+                      <div className="w-6 h-6 flex items-center justify-center bg-olive text-white rounded text-[10px] font-mono">PY</div>
+                      <h3 className="text-2xl font-serif font-semibold">Calculation Logic (Python)</h3>
+                    </div>
+                    <div className="bg-gray-900 rounded-2xl p-6 overflow-x-auto">
+                      <pre className="text-emerald-400 font-mono text-sm leading-relaxed">
+                        <code>{finaleData.pythonCode}</code>
+                      </pre>
+                    </div>
                   </div>
                 </div>
               </div>
