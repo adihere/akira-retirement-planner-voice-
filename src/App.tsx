@@ -128,7 +128,7 @@ export default function App() {
             
             sessionPromise.then(session => {
               if (history.length > 0) {
-                session.sendClientContent({ turns: history });
+                session.sendClientContent({ turns: history, turnComplete: true });
               }
             });
             
