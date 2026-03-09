@@ -70,10 +70,50 @@ export class AudioRecorder {
 export class AudioStreamer {
   audioContext: AudioContext;
   nextStartTime: number = 0;
-  sources: AudioBufferSourceNode[] = [];
+  sources: Array<{ source: AudioBufferSourceNode; timestamp: number }> = [];
+  private readonly maxSources: number = 100;
+  private cleanupInterval: number | null = null;
 
   constructor() {
     this.audioContext = new AudioContext({ sampleRate: 24000 });
+    this.startCleanupInterval();
+  }
+
+  private startCleanupInterval() {
+    // Clean up stale sources every 5 seconds
+    this.cleanupInterval = window.setInterval(() => {
+      this.cleanupStaleSources();
+    }, 5000);
+  }
+
+  private cleanupStaleSources() {
+    const now = Date.now();
+    const staleThreshold = 10000; // 10 seconds
+
+    this.sources = this.sources.filter(item => {
+      const isStale = now - item.timestamp > staleThreshold;
+      if (isStale) {
+        try {
+          item.source.stop();
+        } catch (e) {
+          // Ignore errors when stopping stale sources
+        }
+      }
+      return !isStale;
+    });
+
+    // Also enforce max sources limit by removing oldest if needed
+    if (this.sources.length > this.maxSources) {
+      const excessCount = this.sources.length - this.maxSources;
+      const toRemove = this.sources.splice(0, excessCount);
+      toRemove.forEach(item => {
+        try {
+          item.source.stop();
+        } catch (e) {
+          // Ignore errors when stopping excess sources
+        }
+      });
+    }
   }
 
   addPCM16(base64: string) {
@@ -103,10 +143,10 @@ export class AudioStreamer {
         this.nextStartTime = currentTime;
     }
     source.start(this.nextStartTime);
-    this.sources.push(source);
+    this.sources.push({ source, timestamp: Date.now() });
     
     source.onended = () => {
-      this.sources = this.sources.filter(s => s !== source);
+      this.sources = this.sources.filter(s => s.source !== source);
     };
 
     this.nextStartTime += audioBuffer.duration;
@@ -116,11 +156,16 @@ export class AudioStreamer {
     if (this.audioContext.state !== 'closed') {
       this.audioContext.close();
     }
+    // Clear the cleanup interval
+    if (this.cleanupInterval !== null) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
   }
   
   interrupt() {
-     this.sources.forEach(source => {
-       try { source.stop(); } catch (e) {}
+     this.sources.forEach(item => {
+       try { item.source.stop(); } catch (e) {}
      });
      this.sources = [];
      this.nextStartTime = this.audioContext.currentTime;

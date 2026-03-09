@@ -4,7 +4,109 @@ import { Mic, Square, Loader2, Sparkles, Target, TrendingUp, Settings, User } fr
 import { AudioRecorder, AudioStreamer } from './lib/audio';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
+import DOMPurify from 'dompurify';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+
+/**
+ * Safe localStorage utility with error handling
+ * Prevents application crashes when localStorage is unavailable, quota exceeded, or in private browsing mode
+ */
+const safeStorage = {
+  /**
+   * Safely retrieves an item from localStorage
+   * @param key - The localStorage key
+   * @returns The stored value or null if unavailable
+   */
+  getItem: (key: string): string | null => {
+    try {
+      return localStorage.getItem(key);
+    } catch (error) {
+      console.error(`[localStorage] Failed to get item "${key}":`, error);
+      return null;
+    }
+  },
+
+  /**
+   * Safely stores an item in localStorage
+   * @param key - The localStorage key
+   * @param value - The value to store
+   * @returns true if successful, false otherwise
+   */
+  setItem: (key: string, value: string): boolean => {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch (error) {
+      console.error(`[localStorage] Failed to set item "${key}":`, error);
+      return false;
+    }
+  },
+
+  /**
+   * Safely removes an item from localStorage
+   * @param key - The localStorage key
+   * @returns true if successful, false otherwise
+   */
+  removeItem: (key: string): boolean => {
+    try {
+      localStorage.removeItem(key);
+      return true;
+    } catch (error) {
+      console.error(`[localStorage] Failed to remove item "${key}":`, error);
+      return false;
+    }
+  },
+
+  /**
+   * Safely parses JSON from localStorage
+   * @param key - The localStorage key
+   * @param defaultValue - The default value to return if parsing fails
+   * @returns The parsed object or the default value if unavailable
+   */
+  getJSON: (key: string, defaultValue: any): any => {
+    try {
+      const item = safeStorage.getItem(key);
+      if (item === null) {
+        return defaultValue;
+      }
+      return JSON.parse(item);
+    } catch (error) {
+      console.error(`[localStorage] Failed to parse JSON for item "${key}":`, error);
+      return defaultValue;
+    }
+  },
+
+  /**
+   * Safely stores a JSON object in localStorage
+   * @param key - The localStorage key
+   * @param value - The object to store
+   * @returns true if successful, false otherwise
+   */
+  setJSON: (key: string, value: any): boolean => {
+    try {
+      const jsonString = JSON.stringify(value);
+      return safeStorage.setItem(key, jsonString);
+    } catch (error) {
+      console.error(`[localStorage] Failed to stringify and set item "${key}":`, error);
+      return false;
+    }
+  }
+};
+
+/**
+ * SafeMarkdown component that sanitizes markdown content before rendering
+ * Prevents XSS attacks by only allowing safe HTML elements and attributes
+ */
+const SafeMarkdown = ({ children }: { children: string }) => {
+  // Configure DOMPurify to only allow safe HTML elements and attributes
+  const sanitizedContent = DOMPurify.sanitize(children, {
+    ALLOWED_TAGS: ['p', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'br'],
+    ALLOWED_ATTR: [], // Disallow all attributes for maximum security
+    KEEP_CONTENT: true, // Keep text content even if tags are removed
+  });
+
+  return <ReactMarkdown>{sanitizedContent}</ReactMarkdown>;
+};
 
 const SYSTEM_INSTRUCTION = `You are Akira, a warm, expert UK Retirement Coach. Your goal is to help users visualize and plan their retirement through a natural, voice-first conversation.
 
@@ -130,14 +232,13 @@ export default function App() {
   const [finaleData, setFinaleData] = useState<any>(null);
   const [projectionData, setProjectionData] = useState<any[] | null>(null);
   const [snapshot, setSnapshot] = useState<any>(() => {
-    const saved = localStorage.getItem('akira_snapshot');
-    return saved ? JSON.parse(saved) : null;
+    return safeStorage.getJSON('akira_snapshot', null);
   });
   const [history, setHistory] = useState<any[]>(() => {
-    const saved = localStorage.getItem('akira_history');
-    return saved ? JSON.parse(saved) : [];
+    return safeStorage.getJSON('akira_history', []);
   });
   const [liveTranscript, setLiveTranscript] = useState<{role: 'user' | 'model', text: string} | null>(null);
+  const [session, setSession] = useState<any>(null);
   
   const sessionRef = useRef<any>(null);
   const audioRecorderRef = useRef<AudioRecorder | null>(null);
@@ -154,9 +255,19 @@ export default function App() {
     }
   }, [history, liveTranscript]);
 
+  useEffect(() => {
+    if (session && isConnected && history.length > 0) {
+      const historyText = history.map(h => `${h.role}: ${h.parts[0].text}`).join('\n');
+      session.sendClientContent({
+        turns: [{ role: 'user', parts: [{ text: `Here is our conversation history so far:\n${historyText}` }] }],
+        turnComplete: true
+      });
+    }
+  }, [session, isConnected]);
+
   const clearHistory = () => {
-    localStorage.removeItem('akira_history');
-    localStorage.removeItem('akira_snapshot');
+    safeStorage.removeItem('akira_history');
+    safeStorage.removeItem('akira_snapshot');
     setHistory([]);
     setSnapshot(null);
   };
@@ -186,22 +297,12 @@ export default function App() {
             setIsConnected(true);
             setIsConnecting(false);
             
-            sessionPromise.then(session => {
-              if (history.length > 0) {
-                const historyText = history.map(h => `${h.role}: ${h.parts[0].text}`).join('\n');
-                session.sendClientContent({ 
-                  turns: [{ role: 'user', parts: [{ text: `Here is our conversation history so far:\n${historyText}` }] }], 
-                  turnComplete: true 
-                });
-              }
-            });
-            
             audioRecorderRef.current = new AudioRecorder((base64) => {
-              sessionPromise.then(session => {
+              if (session && isConnected) {
                 session.sendRealtimeInput({
                   media: { data: base64, mimeType: 'audio/pcm;rate=16000' }
                 });
-              });
+              }
             });
             audioRecorderRef.current.start();
           },
@@ -217,7 +318,7 @@ export default function App() {
                 lastUserTextRef.current = currentInputRef.current;
                 setHistory(prev => {
                   const newHistory = [...prev, { role: 'user', parts: [{ text: currentInputRef.current }] }];
-                  localStorage.setItem('akira_history', JSON.stringify(newHistory));
+                  safeStorage.setJSON('akira_history', newHistory);
                   return newHistory;
                 });
                 currentInputRef.current = '';
@@ -247,7 +348,7 @@ export default function App() {
                 }
                 setHistory(prev => {
                   const newHistory = [...prev, { role: 'model', parts: [{ text: currentOutputRef.current }] }];
-                  localStorage.setItem('akira_history', JSON.stringify(newHistory));
+                  safeStorage.setJSON('akira_history', newHistory);
                   return newHistory;
                 });
                 currentOutputRef.current = '';
@@ -269,7 +370,7 @@ export default function App() {
               if (currentOutputRef.current.trim()) {
                 setHistory(prev => {
                   const newHistory = [...prev, { role: 'model', parts: [{ text: currentOutputRef.current }] }];
-                  localStorage.setItem('akira_history', JSON.stringify(newHistory));
+                  safeStorage.setJSON('akira_history', newHistory);
                   return newHistory;
                 });
                 currentOutputRef.current = '';
@@ -305,8 +406,8 @@ export default function App() {
                       pythonCode: typeof args.pythonCode === 'string' ? args.pythonCode : "# Calculation logic",
                       imageUrl: null
                     });
-                    
-                    sessionPromise.then(session => {
+
+                    if (session) {
                       session.sendToolResponse({
                         functionResponses: [{
                           id: call.id,
@@ -314,7 +415,7 @@ export default function App() {
                           response: { status: "success" }
                         }]
                       });
-                    });
+                    }
 
                     try {
                       const imageAi = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -368,7 +469,7 @@ export default function App() {
 
                     setProjectionData(data);
 
-                    sessionPromise.then(session => {
+                    if (session) {
                       session.sendToolResponse({
                         functionResponses: [{
                           id: call.id,
@@ -376,7 +477,7 @@ export default function App() {
                           response: { status: "success", projectedFinalBalance: Math.round(balance) }
                         }]
                       });
-                    });
+                    }
                   } else if (call.name === 'updateSnapshot') {
                     const args = (call.args || {}) as any;
                     const validatedArgs: any = {};
@@ -389,10 +490,10 @@ export default function App() {
 
                     setSnapshot((prev: any) => {
                       const newSnapshot = { ...prev, ...validatedArgs, lastSessionDate: new Date().toLocaleDateString() };
-                      localStorage.setItem('akira_snapshot', JSON.stringify(newSnapshot));
+                      safeStorage.setJSON('akira_snapshot', newSnapshot);
                       return newSnapshot;
                     });
-                    sessionPromise.then(session => {
+                    if (session) {
                       session.sendToolResponse({
                         functionResponses: [{
                           id: call.id,
@@ -400,7 +501,7 @@ export default function App() {
                           response: { status: "success" }
                         }]
                       });
-                    });
+                    }
                   }
                 }
               }
@@ -416,7 +517,9 @@ export default function App() {
         }
       });
       
-      sessionRef.current = sessionPromise;
+      const resolvedSession = await sessionPromise;
+      setSession(resolvedSession);
+      sessionRef.current = resolvedSession;
       
     } catch (error) {
       console.error("Connection failed:", error);
@@ -442,6 +545,7 @@ export default function App() {
       }
       sessionRef.current = null;
     }
+    setSession(null);
     setIsConnected(false);
     setIsConnecting(false);
   };
@@ -744,7 +848,7 @@ export default function App() {
                       <h3 className="text-2xl font-serif font-semibold">The Reality Check</h3>
                     </div>
                     <div className="prose prose-olive text-gray-700 leading-relaxed">
-                      <ReactMarkdown>{finaleData.realityCheck}</ReactMarkdown>
+                      <SafeMarkdown>{finaleData.realityCheck}</SafeMarkdown>
                     </div>
                   </div>
 
