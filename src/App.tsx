@@ -165,7 +165,7 @@ export default function App() {
     setIsConnecting(true);
     setFinaleData(null);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
       
       audioStreamerRef.current = new AudioStreamer();
       
@@ -317,7 +317,7 @@ export default function App() {
                     });
 
                     try {
-                      const imageAi = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+                      const imageAi = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
                       const imgRes = await imageAi.models.generateContent({
                         model: 'gemini-2.5-flash-image',
                         contents: { parts: [{ text: args.imagePrompt || "A beautiful retirement home." }] },
