@@ -91,22 +91,73 @@ sequenceDiagram
 
 ## Run Locally
 
-**Prerequisites:** Node.js
+**Prerequisites:** Node.js 18+, a microphone, and a Gemini API key
 
-1. Install dependencies:
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/adihere/akira-retirement-planner-voice-.git
+   cd akira-retirement-planner-voice-
+   ```
+
+2. Install dependencies:
    ```bash
    npm install
    ```
 
-2. Set the `VITE_GEMINI_API_KEY` in `.env.local` to your Gemini API key:
+3. Create a `.env.local` file and add your Gemini API key:
    ```bash
+   cp .env.example .env.local
+   # Edit .env.local and set your API key
    VITE_GEMINI_API_KEY=your_api_key_here
    ```
 
-3. Run the app:
+4. Run the app:
    ```bash
    npm run dev
    ```
+
+5. Open [http://localhost:3000](http://localhost:3000) in your browser
+
+## Testing the Application
+
+### Quick Start Test
+
+1. **Allow microphone access** when prompted by the browser
+2. **Click the microphone button** to start a session with Akira
+3. **Speak naturally** - try saying: "Hi Akira, I'm 45 years old and want to retire at 60"
+4. **Listen to Akira's response** and continue the conversation
+5. **Request your finale report** by saying: "Can you give me my retirement summary?"
+
+### Test Scenarios
+
+| Scenario | What to Say | Expected Result |
+|----------|-------------|-----------------|
+| **Basic Introduction** | "Hi, I'm new to retirement planning" | Akira introduces herself and asks about your goals |
+| **Financial Input** | "I have a pension worth 200,000 pounds and earn 50,000 a year" | Akira acknowledges and may call `updateSnapshot` to save your data |
+| **Projection Request** | "What will my retirement look like?" | Akira calculates projections using `calculateRetirementProjection` |
+| **Grand Finale** | "Give me my complete retirement report" | Akira triggers `triggerGrandFinale` with full visual report |
+| **Context Continuity** | Refresh the page and start a new session | Akira remembers your previous conversation context |
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| No audio playback | Check browser audio permissions and volume |
+| Microphone not working | Ensure microphone permissions are granted; try a different browser |
+| "API key not configured" error | Verify `VITE_GEMINI_API_KEY` is set in `.env.local` |
+| Session won't connect | Check your internet connection and API key validity |
+| Mobile audio issues | Tap the screen once before starting (helps with AudioContext activation) |
+
+### Browser Compatibility
+
+| Browser | Status | Notes |
+|---------|--------|-------|
+| Chrome 90+ | Fully Supported | Recommended |
+| Firefox 90+ | Fully Supported | - |
+| Safari 15+ | Supported | May require user interaction for audio |
+| Edge 90+ | Fully Supported | - |
+| Mobile Chrome | Supported | Tap screen before starting session |
+| Mobile Safari | Supported | Tap screen before starting session |
 
 ## Tech Stack
 
