@@ -127,6 +127,7 @@ const updateSnapshotDeclaration = {
 export default function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [finaleData, setFinaleData] = useState<any>(null);
   const [projectionData, setProjectionData] = useState<any[] | null>(null);
   const [snapshot, setSnapshot] = useState<any>(() => {
@@ -147,6 +148,7 @@ export default function App() {
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const lastInputTimeRef = useRef<number | null>(null);
   const lastUserTextRef = useRef<string>('');
+  const isDisconnectingRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (transcriptEndRef.current) {
@@ -162,14 +164,31 @@ export default function App() {
   };
 
   const connect = async () => {
+    // Reset state
     setIsConnecting(true);
+    setConnectionError(null);
     setFinaleData(null);
+    isDisconnectingRef.current = false;
+    
+    // Validate API key
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      setConnectionError('API key not configured. Please add VITE_GEMINI_API_KEY to your environment variables.');
+      setIsConnecting(false);
+      return;
+    }
+    
     try {
-      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+      const ai = new GoogleGenAI({ apiKey });
       
+      // Create audio streamer and ensure it's ready for mobile
       audioStreamerRef.current = new AudioStreamer();
+      await audioStreamerRef.current.ensureResumed();
       
-      const sessionPromise = ai.live.connect({
+      // Create a resolved session holder that callbacks can safely reference
+      let resolvedSession: any = null;
+      
+      const session = await ai.live.connect({
         model: "gemini-2.5-flash-native-audio-preview-09-2025",
         config: {
           responseModalities: [Modality.AUDIO],
@@ -185,25 +204,6 @@ export default function App() {
           onopen: () => {
             setIsConnected(true);
             setIsConnecting(false);
-            
-            sessionPromise.then(session => {
-              if (history.length > 0) {
-                const historyText = history.map(h => `${h.role}: ${h.parts[0].text}`).join('\n');
-                session.sendClientContent({ 
-                  turns: [{ role: 'user', parts: [{ text: `Here is our conversation history so far:\n${historyText}` }] }], 
-                  turnComplete: true 
-                });
-              }
-            });
-            
-            audioRecorderRef.current = new AudioRecorder((base64) => {
-              sessionPromise.then(session => {
-                session.sendRealtimeInput({
-                  media: { data: base64, mimeType: 'audio/pcm;rate=16000' }
-                });
-              });
-            });
-            audioRecorderRef.current.start();
           },
           onmessage: async (message: LiveServerMessage) => {
             if (message.serverContent?.inputTranscription) {
@@ -306,18 +306,18 @@ export default function App() {
                       imageUrl: null
                     });
                     
-                    sessionPromise.then(session => {
-                      session.sendToolResponse({
+                    if (resolvedSession) {
+                      resolvedSession.sendToolResponse({
                         functionResponses: [{
                           id: call.id,
                           name: call.name,
                           response: { status: "success" }
                         }]
                       });
-                    });
+                    }
 
                     try {
-                      const imageAi = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+                      const imageAi = new GoogleGenAI({ apiKey });
                       const imgRes = await imageAi.models.generateContent({
                         model: 'gemini-2.5-flash-image',
                         contents: { parts: [{ text: args.imagePrompt || "A beautiful retirement home." }] },
@@ -368,15 +368,15 @@ export default function App() {
 
                     setProjectionData(data);
 
-                    sessionPromise.then(session => {
-                      session.sendToolResponse({
+                    if (resolvedSession) {
+                      resolvedSession.sendToolResponse({
                         functionResponses: [{
                           id: call.id,
                           name: call.name,
                           response: { status: "success", projectedFinalBalance: Math.round(balance) }
                         }]
                       });
-                    });
+                    }
                   } else if (call.name === 'updateSnapshot') {
                     const args = (call.args || {}) as any;
                     const validatedArgs: any = {};
@@ -392,15 +392,15 @@ export default function App() {
                       localStorage.setItem('akira_snapshot', JSON.stringify(newSnapshot));
                       return newSnapshot;
                     });
-                    sessionPromise.then(session => {
-                      session.sendToolResponse({
+                    if (resolvedSession) {
+                      resolvedSession.sendToolResponse({
                         functionResponses: [{
                           id: call.id,
                           name: call.name,
                           response: { status: "success" }
                         }]
                       });
-                    });
+                    }
                   }
                 }
               }
@@ -416,32 +416,91 @@ export default function App() {
         }
       });
       
-      sessionRef.current = sessionPromise;
+      // Session is now resolved - store reference and set up recorder
+      resolvedSession = session;
+      sessionRef.current = session;
+      
+      // Send history context if available
+      if (history.length > 0) {
+        const historyText = history.map(h => `${h.role}: ${h.parts[0].text}`).join('\n');
+        session.sendClientContent({ 
+          turns: [{ role: 'user', parts: [{ text: `Here is our conversation history so far:\n${historyText}` }] }], 
+          turnComplete: true 
+        });
+      }
+      
+      // Start audio recording - must happen AFTER session is ready
+      audioRecorderRef.current = new AudioRecorder((base64) => {
+        if (sessionRef.current) {
+          sessionRef.current.sendRealtimeInput({
+            media: { data: base64, mimeType: 'audio/pcm;rate=16000' }
+          });
+        }
+      });
+      await audioRecorderRef.current.start();
       
     } catch (error) {
       console.error("Connection failed:", error);
+      
+      // Set user-friendly error message
+      const message = error instanceof Error ? error.message : 'Connection failed';
+      if (message.includes('permission') || message.includes('Permission') || message.includes('NotAllowedError')) {
+        setConnectionError('Microphone access was denied. Please allow microphone access and try again.');
+      } else if (message.includes('API key') || message.includes('apiKey')) {
+        setConnectionError('API configuration error. Please check your environment variables.');
+      } else if (message.includes('No microphone') || message.includes('NotFoundError')) {
+        setConnectionError('No microphone found. Please connect a microphone and try again.');
+      } else {
+        setConnectionError(`Unable to connect: ${message}`);
+      }
+      
       setIsConnecting(false);
-      disconnect();
+      
+      // Clean up any partial resources
+      if (audioStreamerRef.current) {
+        audioStreamerRef.current.stop();
+        audioStreamerRef.current = null;
+      }
+      if (audioRecorderRef.current) {
+        audioRecorderRef.current.stop();
+        audioRecorderRef.current = null;
+      }
     }
   };
 
   const disconnect = () => {
+    // Prevent double disconnect
+    if (isDisconnectingRef.current) {
+      return;
+    }
+    isDisconnectingRef.current = true;
+    
+    // Clean up audio recorder
     if (audioRecorderRef.current) {
-      audioRecorderRef.current.stop();
+      try {
+        audioRecorderRef.current.stop();
+      } catch (e) { /* ignore cleanup errors */ }
       audioRecorderRef.current = null;
     }
+    
+    // Clean up audio streamer
     if (audioStreamerRef.current) {
-      audioStreamerRef.current.stop();
+      try {
+        audioStreamerRef.current.stop();
+      } catch (e) { /* ignore cleanup errors */ }
       audioStreamerRef.current = null;
     }
+    
+    // Clean up session
     if (sessionRef.current) {
-      if (typeof sessionRef.current.then === 'function') {
-        sessionRef.current.then((session: any) => session.close());
-      } else {
-        sessionRef.current.close();
-      }
+      try {
+        if (typeof sessionRef.current.close === 'function') {
+          sessionRef.current.close();
+        }
+      } catch (e) { /* ignore cleanup errors */ }
       sessionRef.current = null;
     }
+    
     setIsConnected(false);
     setIsConnecting(false);
   };
@@ -502,12 +561,29 @@ export default function App() {
             </div>
 
             <div className="flex flex-col items-start justify-start space-y-8">
+              {/* Error display */}
+              {connectionError && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="w-full max-w-md bg-red-50 border border-red-200 rounded-2xl p-4"
+                >
+                  <p className="text-red-700 text-sm">{connectionError}</p>
+                  <button 
+                    onClick={() => setConnectionError(null)}
+                    className="mt-2 text-red-600 text-sm underline hover:text-red-800"
+                  >
+                    Dismiss
+                  </button>
+                </motion.div>
+              )}
+              
               {!isConnected && !isConnecting ? (
                 <div className="flex flex-col items-start space-y-6">
                   <motion.button 
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    onClick={() => { clearHistory(); connect(); }}
+                    onClick={() => { setConnectionError(null); clearHistory(); connect(); }}
                     className="group relative flex items-center justify-center w-32 h-32 rounded-full bg-olive text-white shadow-xl hover:bg-olive-light transition-colors duration-300 cursor-pointer"
                   >
                     <Mic size={40} className="group-hover:scale-110 transition-transform" />
