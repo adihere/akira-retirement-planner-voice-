@@ -37,7 +37,6 @@ Pass in:
 - imagePrompt: A detailed prompt to generate a Vision Board image of their described retirement home and lifestyle.
 - wayForward: Three specific, actionable suggestions.
 - netWorthProjection: A year-by-year calculation of their total net worth (Pension + ISA + Home Equity) for the next 5-10 years leading up to retirement.
-- pythonCode: A string containing Python code that calculates this net worth projection and generates a line graph. (Do not execute it, just provide the code as a string).
 
 After calling the tool, wrap up the conversation warmly.
 
@@ -82,13 +81,9 @@ const triggerGrandFinaleDeclaration = {
           required: ["year", "netWorth"]
         },
         description: "Year-by-year net worth projection data."
-      },
-      pythonCode: {
-        type: Type.STRING,
-        description: "A string containing Python code that calculates this net worth projection and generates a line graph."
       }
     },
-    required: ["realityCheck", "imagePrompt", "wayForward", "netWorthProjection", "pythonCode"]
+    required: ["realityCheck", "imagePrompt", "wayForward", "netWorthProjection"]
   }
 };
 
@@ -302,7 +297,6 @@ export default function App() {
                       imagePrompt: typeof args.imagePrompt === 'string' ? args.imagePrompt : "A beautiful retirement home.",
                       wayForward: Array.isArray(args.wayForward) ? args.wayForward.filter((s: any) => typeof s === 'string') : [],
                       netWorthProjection: validProjection,
-                      pythonCode: typeof args.pythonCode === 'string' ? args.pythonCode : "# Calculation logic",
                       imageUrl: null
                     });
                     
@@ -889,17 +883,6 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-3 text-olive">
-                      <div className="w-6 h-6 flex items-center justify-center bg-olive text-white rounded text-[10px] font-mono">PY</div>
-                      <h3 className="text-2xl font-serif font-semibold">Calculation Logic (Python)</h3>
-                    </div>
-                    <div className="bg-gray-900 rounded-2xl p-6 overflow-x-auto">
-                      <pre className="text-emerald-400 font-mono text-sm leading-relaxed">
-                        <code>{finaleData.pythonCode}</code>
-                      </pre>
-                    </div>
-                  </div>
                 </div>
               </div>
             </motion.div>
