@@ -51,6 +51,8 @@ flowchart TB
     LS -->|"Restore Context"| UI
 ```
 
+For a more detailed architectural overview with easy-to-understand diagrams, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## Data Flow
 
 ```mermaid
@@ -172,6 +174,35 @@ sequenceDiagram
 | Variable | Description |
 |----------|-------------|
 | `VITE_GEMINI_API_KEY` | Your Google Gemini API key |
+
+## Roadmap
+
+The following features and improvements are planned for future releases of Akira:
+
+### Authentication & User Management
+
+- 🚧 **Planned**: Firebase Authentication integration (email/password, Google OAuth)
+- 🚧 **Planned**: User profile management
+- 🚧 **Planned**: Session management
+
+### Cloud Persistence
+
+- 🎯 **Priority**: Firebase Firestore for storing user financial data
+- 🎯 **Priority**: Firebase Storage for generated images and reports
+- 🔮 **Future**: Cross-device sync capabilities
+
+### Enhanced Features
+
+- 🔮 **Future**: Multi-user planning (couples/family planning)
+- 🔮 **Future**: Real-time market data integration
+- 🔮 **Future**: Advanced analytics and retirement readiness scores
+- 🔮 **Future**: Multi-language support
+
+### Platform Improvements
+
+- 🔮 **Future**: Mobile app development (React Native)
+- 🔮 **Future**: Desktop application
+- 🔮 **Future**: Integration with financial institutions
 
 ## License
 
