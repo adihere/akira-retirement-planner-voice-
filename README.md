@@ -88,6 +88,7 @@ sequenceDiagram
 - **Retirement Planning Tools**: Projection calculations, snapshot tracking, and comprehensive finale reports
 - **Persistent Context**: Conversation history and user data saved locally for continuity
 - **Mobile-Friendly**: AudioContext handling optimized for mobile browsers
+- **Google Authentication**: Sign in with Google to save your retirement planning data across devices
 
 ## Run Locally
 
@@ -105,13 +106,28 @@ sequenceDiagram
    ```
 
 3. Create a `.env.local` file and add your Gemini API key:
-   ```bash
-   cp .env.example .env.local
-   # Edit .env.local and set your API key
-   VITE_GEMINI_API_KEY=your_api_key_here
-   ```
+    ```bash
+    cp .env.example .env.local
+    # Edit .env.local and set your API key
+    VITE_GEMINI_API_KEY=your_api_key_here
+    ```
 
-4. Run the app:
+4. Set up Firebase for Google Authentication:
+    ```bash
+    npm install firebase
+    ```
+   
+   - Create a Firebase project at [https://console.firebase.google.com/](https://console.firebase.google.com/)
+   - Enable **Google Authentication** in the Firebase console (Authentication > Sign-in method > Google)
+   - Add the Firebase environment variables to your `.env.local` file (see format in `.env.example`):
+     ```bash
+     VITE_FIREBASE_API_KEY=your_firebase_api_key
+     VITE_FIREBASE_AUTH_DOMAIN=your_project_id.firebaseapp.com
+     VITE_FIREBASE_PROJECT_ID=your_project_id
+     VITE_FIREBASE_APP_ID=your_firebase_app_id
+     ```
+
+5. Run the app:
    ```bash
    npm run dev
    ```
@@ -159,6 +175,30 @@ sequenceDiagram
 | Mobile Chrome | Supported | Tap screen before starting session |
 | Mobile Safari | Supported | Tap screen before starting session |
 
+## Authentication
+
+Akira now supports Google login with 3 free conversations before sign-in is required.
+
+### How the Trial Works
+
+- **Anonymous Access**: New users can explore Akira with up to 3 conversations without signing in
+- **Conversation Counting**: Each voice session counts as one conversation
+- **Trial Limit**: After 3 conversations, users must sign in with Google to continue using the app
+- **Data Persistence**: Signed-in users can access their retirement planning data across different devices
+
+### Sign In with Google
+
+1. Click the **"Sign in with Google"** button in the app
+2. You'll be redirected to Google's authentication page
+3. Authorize Akira to access your Google account
+4. Once signed in, your conversation history and retirement data will be saved to Firebase
+
+### What Happens After the Trial Limit
+
+- You'll see a prompt to sign in with Google
+- Your conversation history will be preserved locally until you sign in
+- After signing in, your data will be synced to Firebase and accessible across devices
+
 ## Tech Stack
 
 - **Frontend**: React 19, Vite, TailwindCSS, Motion (Framer Motion)
@@ -172,6 +212,10 @@ sequenceDiagram
 | Variable | Description |
 |----------|-------------|
 | `VITE_GEMINI_API_KEY` | Your Google Gemini API key |
+| `VITE_FIREBASE_API_KEY` | Your Firebase API key (from Firebase console) |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Your Firebase project domain (e.g., `your-project.firebaseapp.com`) |
+| `VITE_FIREBASE_PROJECT_ID` | Your Firebase project ID |
+| `VITE_FIREBASE_APP_ID` | Your Firebase app ID |
 
 ## License
 

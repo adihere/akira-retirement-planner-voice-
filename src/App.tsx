@@ -5,6 +5,7 @@ import { AudioRecorder, AudioStreamer } from './lib/audio';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useAuth } from './auth/AuthContext';
 
 const SYSTEM_INSTRUCTION = `You are Akira, a warm, expert UK Retirement Coach. Your goal is to help users visualize and plan their retirement through a natural, voice-first conversation.
 
@@ -120,6 +121,7 @@ const updateSnapshotDeclaration = {
 };
 
 export default function App() {
+  const { user, loading, signInWithGoogle, signOut } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
@@ -133,6 +135,11 @@ export default function App() {
     const saved = localStorage.getItem('akira_history');
     return saved ? JSON.parse(saved) : [];
   });
+  const [trialCount, setTrialCount] = useState<number>(() => {
+    const saved = localStorage.getItem('akira_trial_count');
+    return saved ? parseInt(saved, 10) : 0;
+  });
+  const [hasTrialLimitReached, setHasTrialLimitReached] = useState<boolean>(false);
   const [liveTranscript, setLiveTranscript] = useState<{role: 'user' | 'model', text: string} | null>(null);
   
   const sessionRef = useRef<any>(null);
@@ -151,14 +158,31 @@ export default function App() {
     }
   }, [history, liveTranscript]);
 
+  // Update trial limit status based on user and trial count
+  useEffect(() => {
+    if (user === null && trialCount >= 3) {
+      setHasTrialLimitReached(true);
+    } else {
+      setHasTrialLimitReached(false);
+    }
+  }, [user, trialCount]);
+
   const clearHistory = () => {
     localStorage.removeItem('akira_history');
     localStorage.removeItem('akira_snapshot');
+    localStorage.removeItem('akira_trial_count');
     setHistory([]);
     setSnapshot(null);
+    setTrialCount(0);
   };
 
   const connect = async () => {
+    // Check if trial limit is reached for anonymous users
+    if (user === null && hasTrialLimitReached) {
+      setConnectionError('Free trial limit reached. Please sign in to continue using Akira.');
+      return;
+    }
+    
     // Reset state
     setIsConnecting(true);
     setConnectionError(null);
@@ -215,6 +239,16 @@ export default function App() {
                   localStorage.setItem('akira_history', JSON.stringify(newHistory));
                   return newHistory;
                 });
+                
+                // Increment trial count for anonymous users when a message is successfully sent
+                if (user === null) {
+                  setTrialCount(prev => {
+                    const newCount = prev + 1;
+                    localStorage.setItem('akira_trial_count', newCount.toString());
+                    return newCount;
+                  });
+                }
+                
                 currentInputRef.current = '';
                 setLiveTranscript(null);
               }
@@ -534,14 +568,102 @@ export default function App() {
             About Akira
           </button>
           <div className="flex items-center space-x-4">
-            <button className="p-2 text-olive hover:bg-olive/10 rounded-full transition-colors" aria-label="Profile">
-              <User size={20} />
-            </button>
+            {user === null && !hasTrialLimitReached && (
+              <div className="text-sm text-olive-light">
+                Free trial: {3 - trialCount} conversation{3 - trialCount !== 1 ? 's' : ''} remaining
+              </div>
+            )}
+            {user === null && !hasTrialLimitReached && (
+              <button
+                onClick={signInWithGoogle}
+                className="text-sm text-olive hover:text-olive-light font-medium transition-colors"
+              >
+                Sign in
+              </button>
+            )}
+            {user ? (
+              <div className="flex items-center space-x-3">
+                {user.photoURL ? (
+                  <img
+                    src={user.photoURL}
+                    alt="User"
+                    className="w-8 h-8 rounded-full"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-olive text-white flex items-center justify-center text-sm font-medium">
+                    {user.displayName?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase() || 'U'}
+                  </div>
+                )}
+                <button
+                  onClick={signOut}
+                  className="text-sm text-olive hover:text-olive-light font-medium transition-colors"
+                >
+                  Sign out
+                </button>
+              </div>
+            ) : null}
             <button className="p-2 text-olive hover:bg-olive/10 rounded-full transition-colors" aria-label="Settings">
               <Settings size={20} />
             </button>
           </div>
         </div>
+
+        {/* Login Gate Overlay */}
+        <AnimatePresence>
+          {hasTrialLimitReached && user === null && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="bg-white rounded-3xl shadow-2xl p-8 md:p-12 max-w-md mx-4"
+              >
+                <div className="text-center space-y-6">
+                  <div className="w-16 h-16 mx-auto bg-olive/10 rounded-full flex items-center justify-center">
+                    <User size={32} className="text-olive" />
+                  </div>
+                  
+                  <h2 className="text-3xl font-serif text-olive">
+                    Log in to continue talking to Akira
+                  </h2>
+                  
+                  <p className="text-gray-600 leading-relaxed">
+                    You've used your 3 free conversations. Sign in with Google to continue planning your retirement with Akira.
+                  </p>
+                  
+                  <button
+                    onClick={signInWithGoogle}
+                    disabled={loading}
+                    className="w-full flex items-center justify-center space-x-3 bg-olive text-white py-4 px-6 rounded-xl hover:bg-olive-light transition-colors font-medium text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loading ? (
+                      <Loader2 size={20} className="animate-spin" />
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5" viewBox="0 0 24 24">
+                          <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                          <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                          <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                          <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                        </svg>
+                        <span>Continue with Google</span>
+                      </>
+                    )}
+                  </button>
+                  
+                  <p className="text-xs text-gray-500">
+                    Your data is securely stored and protected.
+                  </p>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
           {/* Left Column */}
@@ -574,17 +696,24 @@ export default function App() {
               
               {!isConnected && !isConnecting ? (
                 <div className="flex flex-col items-start space-y-6">
-                  <motion.button 
+                  <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => { setConnectionError(null); clearHistory(); connect(); }}
-                    className="group relative flex items-center justify-center w-32 h-32 rounded-full bg-olive text-white shadow-xl hover:bg-olive-light transition-colors duration-300 cursor-pointer"
+                    disabled={user === null && hasTrialLimitReached}
+                    className={`group relative flex items-center justify-center w-32 h-32 rounded-full shadow-xl transition-colors duration-300 cursor-pointer ${
+                      user === null && hasTrialLimitReached
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-olive text-white hover:bg-olive-light'
+                    }`}
                   >
                     <Mic size={40} className="group-hover:scale-110 transition-transform" />
                   </motion.button>
                   
                   <div className="flex flex-col items-start space-y-2">
-                    <div className="text-olive font-medium text-xl">
+                    <div className={`font-medium text-xl ${
+                      user === null && hasTrialLimitReached ? 'text-gray-500' : 'text-olive'
+                    }`}>
                       Start New Session
                     </div>
                   </div>
