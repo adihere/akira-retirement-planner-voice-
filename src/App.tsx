@@ -190,9 +190,9 @@ export default function App() {
     isDisconnectingRef.current = false;
     
     // Validate API key
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const apiKey = import.meta.env.GEMINI_API_KEY;
     if (!apiKey) {
-      setConnectionError('API key not configured. Please add VITE_GEMINI_API_KEY to your environment variables.');
+      setConnectionError('API key not configured. Please add GEMINI_API_KEY to your environment variables.');
       setIsConnecting(false);
       return;
     }

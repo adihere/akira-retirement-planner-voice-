@@ -106,11 +106,11 @@ sequenceDiagram
    ```
 
 3. Create a `.env.local` file and add your Gemini API key:
-    ```bash
-    cp .env.example .env.local
-    # Edit .env.local and set your API key
-    VITE_GEMINI_API_KEY=your_api_key_here
-    ```
+     ```bash
+     cp .env.example .env.local
+     # Edit .env.local and set your API key
+     GEMINI_API_KEY=your_api_key_here
+     ```
 
 4. Set up Firebase for Google Authentication:
     ```bash
@@ -121,10 +121,10 @@ sequenceDiagram
    - Enable **Google Authentication** in the Firebase console (Authentication > Sign-in method > Google)
    - Add the Firebase environment variables to your `.env.local` file (see format in `.env.example`):
      ```bash
-     VITE_FIREBASE_API_KEY=your_firebase_api_key
-     VITE_FIREBASE_AUTH_DOMAIN=your_project_id.firebaseapp.com
-     VITE_FIREBASE_PROJECT_ID=your_project_id
-     VITE_FIREBASE_APP_ID=your_firebase_app_id
+     FIREBASE_API_KEY=your_firebase_api_key
+     FIREBASE_AUTH_DOMAIN=your_project_id.firebaseapp.com
+     FIREBASE_PROJECT_ID=your_project_id
+     FIREBASE_APP_ID=your_firebase_app_id
      ```
 
 5. Run the app:
@@ -160,7 +160,7 @@ sequenceDiagram
 |-------|----------|
 | No audio playback | Check browser audio permissions and volume |
 | Microphone not working | Ensure microphone permissions are granted; try a different browser |
-| "API key not configured" error | Verify `VITE_GEMINI_API_KEY` is set in `.env.local` |
+| "API key not configured" error | Verify `GEMINI_API_KEY` is set in `.env.local` |
 | Session won't connect | Check your internet connection and API key validity |
 | Mobile audio issues | Tap the screen once before starting (helps with AudioContext activation) |
 
@@ -211,11 +211,11 @@ Akira now supports Google login with 3 free conversations before sign-in is requ
 
 | Variable | Description |
 |----------|-------------|
-| `VITE_GEMINI_API_KEY` | Your Google Gemini API key |
-| `VITE_FIREBASE_API_KEY` | Your Firebase API key (from Firebase console) |
-| `VITE_FIREBASE_AUTH_DOMAIN` | Your Firebase project domain (e.g., `your-project.firebaseapp.com`) |
-| `VITE_FIREBASE_PROJECT_ID` | Your Firebase project ID |
-| `VITE_FIREBASE_APP_ID` | Your Firebase app ID |
+| `GEMINI_API_KEY` | Your Google Gemini API key |
+| `FIREBASE_API_KEY` | Your Firebase API key (from Firebase console) |
+| `FIREBASE_AUTH_DOMAIN` | Your Firebase project domain (e.g., `your-project.firebaseapp.com`) |
+| `FIREBASE_PROJECT_ID` | Your Firebase project ID |
+| `FIREBASE_APP_ID` | Your Firebase app ID |
 
 ## License
 
