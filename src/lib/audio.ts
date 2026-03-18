@@ -25,17 +25,25 @@ export class AudioRecorder {
     }
 
     try {
+      const requestedSampleRate = 16000;
+
       // Request microphone access
-      this.stream = await navigator.mediaDevices.getUserMedia({ 
+      this.stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
-          sampleRate: 16000,
+          sampleRate: requestedSampleRate,
           echoCancellation: true,
           noiseSuppression: true,
-        } 
+        }
       });
 
-      this.audioContext = new AudioContext({ sampleRate: 16000 });
+      this.audioContext = new AudioContext({ sampleRate: requestedSampleRate });
+
+      // Check if actual sample rate differs from requested (browser compatibility)
+      const actualSampleRate = this.audioContext.sampleRate;
+      if (actualSampleRate !== requestedSampleRate) {
+        console.warn(`[AudioRecorder] Sample rate mismatch: requested ${requestedSampleRate}Hz, got ${actualSampleRate}Hz. Browser may not support the requested rate.`);
+      }
 
       // Resume AudioContext for mobile browser compatibility (autoplay policy)
       if (this.audioContext.state === 'suspended') {
@@ -43,10 +51,10 @@ export class AudioRecorder {
       }
 
       this.source = this.audioContext.createMediaStreamSource(this.stream);
-      
+
       // Note: ScriptProcessorNode is deprecated but AudioWorklet requires
       // serving a separate JS file which complicates deployment.
-      // For now, we continue using ScriptProcessorNode with proper error handling.
+      // TODO: Migrate to AudioWorklet when feasible (acknowledged technical debt)
       this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
 
       this.processor.onaudioprocess = (e) => {
@@ -76,7 +84,6 @@ export class AudioRecorder {
       };
 
       this.source.connect(this.processor);
-      this.processor.connect(this.audioContext.destination);
       this.isStarted = true;
       
     } catch (err) {
@@ -143,7 +150,14 @@ export class AudioStreamer {
   private isStopped: boolean = false;
 
   constructor() {
-    this.audioContext = new AudioContext({ sampleRate: 24000 });
+    const requestedSampleRate = 24000;
+    this.audioContext = new AudioContext({ sampleRate: requestedSampleRate });
+
+    // Check if actual sample rate differs from requested (browser compatibility)
+    const actualSampleRate = this.audioContext.sampleRate;
+    if (actualSampleRate !== requestedSampleRate) {
+      console.warn(`[AudioStreamer] Sample rate mismatch: requested ${requestedSampleRate}Hz, got ${actualSampleRate}Hz. Browser may not support the requested rate.`);
+    }
   }
 
   async ensureResumed(): Promise<void> {
@@ -152,8 +166,13 @@ export class AudioStreamer {
     }
   }
 
-  addPCM16(base64: string): void {
+  async addPCM16(base64: string): Promise<void> {
     if (this.isStopped || this.audioContext.state === 'closed') return;
+
+    // Ensure AudioContext is resumed before creating/playing audio
+    if (this.audioContext.state === 'suspended') {
+      await this.audioContext.resume();
+    }
 
     try {
       const binaryString = atob(base64);
@@ -168,22 +187,26 @@ export class AudioStreamer {
         float32[i] = pcm16[i] / 32768;
       }
 
-      const audioBuffer = this.audioContext.createBuffer(1, float32.length, 24000);
+      const audioBuffer = this.audioContext.createBuffer(1, float32.length, this.audioContext.sampleRate);
       audioBuffer.getChannelData(0).set(float32);
 
       const source = this.audioContext.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(this.audioContext.destination);
 
+      // Check audioContext state before accessing currentTime
       const currentTime = this.audioContext.currentTime;
       if (this.nextStartTime < currentTime) {
         this.nextStartTime = currentTime;
       }
       source.start(this.nextStartTime);
       this.sources.push(source);
-      
+
       source.onended = () => {
-        this.sources = this.sources.filter(s => s !== source);
+        const index = this.sources.indexOf(source);
+        if (index !== -1) {
+          this.sources.splice(index, 1);
+        }
       };
 
       this.nextStartTime += audioBuffer.duration;
@@ -195,6 +218,13 @@ export class AudioStreamer {
   stop(): void {
     this.isStopped = true;
     this.interrupt();
+    // Ensure all sources are properly cleaned up
+    for (const source of this.sources) {
+      try {
+        source.stop();
+      } catch (e) { /* ignore - may already be stopped */ }
+    }
+    this.sources = [];
     if (this.audioContext.state !== 'closed') {
       try {
         this.audioContext.close();
@@ -203,13 +233,15 @@ export class AudioStreamer {
   }
   
   interrupt(): void {
-    this.sources.forEach(source => {
-      try { 
-        source.stop(); 
+    // Iterate in reverse to avoid issues when modifying the array
+    for (let i = this.sources.length - 1; i >= 0; i--) {
+      try {
+        this.sources[i].stop();
       } catch (e) { /* ignore - may already be stopped */ }
-    });
+    }
     this.sources = [];
-    if (this.audioContext.state !== 'closed') {
+    // Check audioContext state before accessing currentTime
+    if (this.audioContext.state === 'running') {
       this.nextStartTime = this.audioContext.currentTime;
     }
   }

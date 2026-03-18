@@ -33,11 +33,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [])
 
   const signInWithGoogle = async (): Promise<void> => {
-    await signInWithPopup(auth, provider)
+    try {
+      await signInWithPopup(auth, provider)
+    } catch (error) {
+      console.error('Error signing in with Google:', error)
+      throw error
+    }
   }
 
   const handleSignOut = async (): Promise<void> => {
-    await signOut(auth)
+    try {
+      await signOut(auth)
+    } catch (error) {
+      console.error('Error signing out:', error)
+      throw error
+    }
   }
 
   const value: AuthContextType = {

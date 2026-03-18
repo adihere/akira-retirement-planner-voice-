@@ -7,6 +7,71 @@ import ReactMarkdown from 'react-markdown';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAuth } from './auth/AuthContext';
 
+// TypeScript interfaces to replace 'any' types
+interface FinaleData {
+  realityCheck: string;
+  imagePrompt: string;
+  wayForward: string[];
+  netWorthProjection: NetWorthProjectionItem[];
+  imageUrl: string | null;
+}
+
+interface NetWorthProjectionItem {
+  year: number;
+  netWorth: number;
+}
+
+interface ProjectionData {
+  age: number;
+  balance: number;
+}
+
+interface Snapshot {
+  currentAge?: number;
+  targetAge?: number;
+  pensionTotal?: number;
+  isaTotal?: number;
+  homeEquity?: string;
+  monthlyFunMoney?: number;
+  lastSessionDate?: string;
+}
+
+interface HistoryMessage {
+  role: 'user' | 'model';
+  parts: Array<{ text?: string }>;
+}
+
+interface TriggerGrandFinaleArgs {
+  realityCheck?: string;
+  imagePrompt?: string;
+  wayForward?: string[];
+  netWorthProjection?: Array<{ year?: number; netWorth?: number }>;
+}
+
+interface CalculateRetirementProjectionArgs {
+  currentAge?: number;
+  retirementAge?: number;
+  currentSavings?: number;
+  monthlyContribution?: number;
+  expectedAnnualReturn?: number;
+}
+
+interface UpdateSnapshotArgs {
+  currentAge?: number;
+  targetAge?: number;
+  pensionTotal?: number;
+  isaTotal?: number;
+  homeEquity?: string;
+  monthlyFunMoney?: number;
+}
+
+interface LiveSession {
+  sendClientContent: (content: unknown) => void;
+  sendRealtimeInput: (input: unknown) => void;
+  sendToolResponse: (response: unknown) => void;
+  close?: () => void;
+}
+
 const SYSTEM_INSTRUCTION = `You are Akira, a warm, expert UK Retirement Coach. Your goal is to help users visualize and plan their retirement through a natural, voice-first conversation.
 
 You must collect the following data points, one or two questions at a time to keep the conversation fluid:
@@ -125,24 +190,42 @@ export default function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [finaleData, setFinaleData] = useState<any>(null);
-  const [projectionData, setProjectionData] = useState<any[] | null>(null);
-  const [snapshot, setSnapshot] = useState<any>(() => {
+  const [finaleData, setFinaleData] = useState<FinaleData | null>(null);
+  const [projectionData, setProjectionData] = useState<ProjectionData[] | null>(null);
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(() => {
     const saved = localStorage.getItem('akira_snapshot');
-    return saved ? JSON.parse(saved) : null;
+    if (!saved) return null;
+    try {
+      return JSON.parse(saved);
+    } catch (error) {
+      console.error('Failed to parse snapshot from localStorage:', error);
+      return null;
+    }
   });
-  const [history, setHistory] = useState<any[]>(() => {
+  const [history, setHistory] = useState<HistoryMessage[]>(() => {
     const saved = localStorage.getItem('akira_history');
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+    try {
+      return JSON.parse(saved);
+    } catch (error) {
+      console.error('Failed to parse history from localStorage:', error);
+      return [];
+    }
   });
   const [trialCount, setTrialCount] = useState<number>(() => {
     const saved = localStorage.getItem('akira_trial_count');
-    return saved ? parseInt(saved, 10) : 0;
+    if (!saved) return 0;
+    try {
+      return parseInt(saved, 10);
+    } catch (error) {
+      console.error('Failed to parse trial count from localStorage:', error);
+      return 0;
+    }
   });
   const [hasTrialLimitReached, setHasTrialLimitReached] = useState<boolean>(false);
   const [liveTranscript, setLiveTranscript] = useState<{role: 'user' | 'model', text: string} | null>(null);
   
-  const sessionRef = useRef<any>(null);
+  const sessionRef = useRef<LiveSession | null>(null);
   const audioRecorderRef = useRef<AudioRecorder | null>(null);
   const audioStreamerRef = useRef<AudioStreamer | null>(null);
   const currentInputRef = useRef<string>('');
@@ -168,6 +251,11 @@ export default function App() {
   }, [user, trialCount]);
 
   const clearHistory = () => {
+    localStorage.removeItem('akira_history');
+    setHistory([]);
+  };
+
+  const clearAllData = () => {
     localStorage.removeItem('akira_history');
     localStorage.removeItem('akira_snapshot');
     localStorage.removeItem('akira_trial_count');
@@ -205,7 +293,7 @@ export default function App() {
       await audioStreamerRef.current.ensureResumed();
       
       // Create a resolved session holder that callbacks can safely reference
-      let resolvedSession: any = null;
+      let resolvedSession: LiveSession | null = null;
       
       const session = await ai.live.connect({
         model: "gemini-2.5-flash-native-audio-preview-09-2025",
@@ -227,7 +315,7 @@ export default function App() {
           onmessage: async (message: LiveServerMessage) => {
             if (message.serverContent?.inputTranscription) {
               const t = message.serverContent.inputTranscription;
-              if (t.text) {
+              if (t?.text) {
                 currentInputRef.current += t.text;
                 setLiveTranscript({ role: 'user', text: currentInputRef.current });
               }
@@ -235,7 +323,7 @@ export default function App() {
                 lastInputTimeRef.current = Date.now();
                 lastUserTextRef.current = currentInputRef.current;
                 setHistory(prev => {
-                  const newHistory = [...prev, { role: 'user', parts: [{ text: currentInputRef.current }] }];
+                  const newHistory = [...prev, { role: 'user' as const, parts: [{ text: currentInputRef.current }] }];
                   localStorage.setItem('akira_history', JSON.stringify(newHistory));
                   return newHistory;
                 });
@@ -255,7 +343,7 @@ export default function App() {
             }
             if (message.serverContent?.outputTranscription) {
               const t = message.serverContent.outputTranscription;
-              if (t.text) {
+              if (t?.text) {
                 if (currentOutputRef.current === '' && lastInputTimeRef.current) {
                   const latency = Date.now() - lastInputTimeRef.current;
                   console.log(`[LATENCY] Model response started in ${latency}ms`);
@@ -275,7 +363,7 @@ export default function App() {
                   }));
                 }
                 setHistory(prev => {
-                  const newHistory = [...prev, { role: 'model', parts: [{ text: currentOutputRef.current }] }];
+                  const newHistory = [...prev, { role: 'model' as const, parts: [{ text: currentOutputRef.current }] }];
                   localStorage.setItem('akira_history', JSON.stringify(newHistory));
                   return newHistory;
                 });
@@ -285,7 +373,7 @@ export default function App() {
             }
 
             if (message.serverContent?.modelTurn?.parts) {
-              for (const part of message.serverContent.modelTurn.parts) {
+              for (const part of message.serverContent?.modelTurn?.parts ?? []) {
                 if (part.inlineData && audioStreamerRef.current) {
                   audioStreamerRef.current.addPCM16(part.inlineData.data);
                 }
@@ -297,7 +385,7 @@ export default function App() {
               }
               if (currentOutputRef.current.trim()) {
                 setHistory(prev => {
-                  const newHistory = [...prev, { role: 'model', parts: [{ text: currentOutputRef.current }] }];
+                  const newHistory = [...prev, { role: 'model' as const, parts: [{ text: currentOutputRef.current }] }];
                   localStorage.setItem('akira_history', JSON.stringify(newHistory));
                   return newHistory;
                 });
@@ -316,7 +404,7 @@ export default function App() {
                     timestamp: new Date().toISOString()
                   }));
                   if (call.name === 'triggerGrandFinale') {
-                    const args = (call.args || {}) as any;
+                    const args = (call.args || {}) as TriggerGrandFinaleArgs;
                     
                     let validProjection = [];
                     if (Array.isArray(args.netWorthProjection)) {
@@ -368,7 +456,7 @@ export default function App() {
                       }, 500);
                     }
                   } else if (call.name === 'calculateRetirementProjection') {
-                    const args = (call.args || {}) as any;
+                    const args = (call.args || {}) as CalculateRetirementProjectionArgs;
                     
                     const currentAge = typeof args.currentAge === 'number' && args.currentAge > 0 ? args.currentAge : 30;
                     const retirementAge = typeof args.retirementAge === 'number' && args.retirementAge > currentAge ? args.retirementAge : currentAge + 20;
@@ -406,8 +494,8 @@ export default function App() {
                       });
                     }
                   } else if (call.name === 'updateSnapshot') {
-                    const args = (call.args || {}) as any;
-                    const validatedArgs: any = {};
+                    const args = (call.args || {}) as UpdateSnapshotArgs;
+                    const validatedArgs: Partial<UpdateSnapshotArgs> = {};
                     if (typeof args.currentAge === 'number' && args.currentAge > 0) validatedArgs.currentAge = args.currentAge;
                     if (typeof args.targetAge === 'number' && args.targetAge > 0) validatedArgs.targetAge = args.targetAge;
                     if (typeof args.pensionTotal === 'number' && args.pensionTotal >= 0) validatedArgs.pensionTotal = args.pensionTotal;
@@ -415,7 +503,7 @@ export default function App() {
                     if (typeof args.homeEquity === 'string') validatedArgs.homeEquity = args.homeEquity;
                     if (typeof args.monthlyFunMoney === 'number' && args.monthlyFunMoney >= 0) validatedArgs.monthlyFunMoney = args.monthlyFunMoney;
 
-                    setSnapshot((prev: any) => {
+                    setSnapshot((prev: Snapshot | null) => {
                       const newSnapshot = { ...prev, ...validatedArgs, lastSessionDate: new Date().toLocaleDateString() };
                       localStorage.setItem('akira_snapshot', JSON.stringify(newSnapshot));
                       return newSnapshot;
@@ -450,13 +538,17 @@ export default function App() {
       
       // Send history context if available
       if (history.length > 0) {
-        const historyText = history.map(h => `${h.role}: ${h.parts[0].text}`).join('\n');
-        session.sendClientContent({ 
-          turns: [{ role: 'user', parts: [{ text: `Here is our conversation history so far:\n${historyText}` }] }], 
-          turnComplete: true 
-        });
+        const historyText = history.map(h => `${h.role}: ${h.parts?.[0]?.text ?? ''}`).join('\n');
+        try {
+          session.sendClientContent({
+            turns: [{ role: 'user', parts: [{ text: `Here is our conversation history so far:\n${historyText}` }] }],
+            turnComplete: true
+          });
+        } catch (error) {
+          console.error('Error sending history context:', error);
+        }
       }
-      
+
       // Start audio recording - must happen AFTER session is ready
       audioRecorderRef.current = new AudioRecorder((base64) => {
         if (sessionRef.current) {
@@ -465,7 +557,12 @@ export default function App() {
           });
         }
       });
-      await audioRecorderRef.current.start();
+      try {
+        await audioRecorderRef.current.start();
+      } catch (error) {
+        console.error('Error starting audio recorder:', error);
+        throw error;
+      }
       
     } catch (error) {
       console.error("Connection failed:", error);
@@ -699,7 +796,7 @@ export default function App() {
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    onClick={() => { setConnectionError(null); clearHistory(); connect(); }}
+                    onClick={() => { setConnectionError(null); clearAllData(); connect(); }}
                     disabled={user === null && hasTrialLimitReached}
                     className={`group relative flex items-center justify-center w-32 h-32 rounded-full shadow-xl transition-colors duration-300 cursor-pointer ${
                       user === null && hasTrialLimitReached
@@ -807,14 +904,14 @@ export default function App() {
                         transition={{ duration: 0.3 }}
                         className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                       >
-                        <div 
+                        <div
                           className={`max-w-[80%] p-4 rounded-2xl ${
-                            msg.role === 'user' 
-                              ? 'bg-olive text-white rounded-br-sm' 
+                            msg.role === 'user'
+                              ? 'bg-olive text-white rounded-br-sm'
                               : 'bg-warm-white text-gray-800 rounded-bl-sm border border-olive/10'
                           }`}
                         >
-                          <p className="text-sm leading-relaxed">{msg.parts[0].text}</p>
+                          <p className="text-sm leading-relaxed">{msg.parts?.[0]?.text ?? ''}</p>
                         </div>
                       </motion.div>
                     ))}
@@ -826,14 +923,14 @@ export default function App() {
                         transition={{ duration: 0.3 }}
                         className={`flex ${liveTranscript.role === 'user' ? 'justify-end' : 'justify-start'}`}
                       >
-                        <div 
+                        <div
                           className={`max-w-[80%] p-4 rounded-2xl ${
-                            liveTranscript.role === 'user' 
-                              ? 'bg-olive/80 text-white rounded-br-sm' 
+                            liveTranscript.role === 'user'
+                              ? 'bg-olive/80 text-white rounded-br-sm'
                               : 'bg-warm-white/80 text-gray-800 rounded-bl-sm border border-olive/10'
                           }`}
                         >
-                          <p className="text-sm leading-relaxed">{liveTranscript.text}</p>
+                          <p className="text-sm leading-relaxed">{liveTranscript?.text ?? ''}</p>
                           <span className="inline-block w-1.5 h-4 ml-1 bg-current animate-pulse align-middle" />
                         </div>
                       </motion.div>
@@ -953,7 +1050,7 @@ export default function App() {
                       <h3 className="text-2xl font-serif font-semibold">The Way Forward</h3>
                     </div>
                     <ul className="space-y-4">
-                      {finaleData.wayForward.map((step: string, i: number) => (
+                      {finaleData.wayForward?.map((step: string, i: number) => (
                         <li key={i} className="flex items-start space-x-4 bg-warm-white p-4 rounded-xl">
                           <div className="flex-shrink-0 w-8 h-8 rounded-full bg-olive text-white flex items-center justify-center font-serif text-lg">
                             {i + 1}
@@ -974,7 +1071,8 @@ export default function App() {
                     <p className="text-gray-600">A projection of your total assets (Pension + ISA + Home Equity) leading up to retirement.</p>
                     <div className="h-80 w-full bg-warm-white p-4 rounded-2xl">
                       <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={finaleData.netWorthProjection} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                        {finaleData.netWorthProjection && (
+                          <AreaChart data={finaleData.netWorthProjection} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                           <defs>
                             <linearGradient id="colorNetWorth" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="5%" stopColor="#5A5A40" stopOpacity={0.3}/>
@@ -999,15 +1097,16 @@ export default function App() {
                             labelFormatter={(label) => `Year ${label}`}
                             contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}
                           />
-                          <Area 
-                            type="monotone" 
-                            dataKey="netWorth" 
-                            stroke="#5A5A40" 
+                          <Area
+                            type="monotone"
+                            dataKey="netWorth"
+                            stroke="#5A5A40"
                             strokeWidth={3}
-                            fillOpacity={1} 
-                            fill="url(#colorNetWorth)" 
+                            fillOpacity={1}
+                            fill="url(#colorNetWorth)"
                           />
                         </AreaChart>
+                        )}
                       </ResponsiveContainer>
                     </div>
                   </div>

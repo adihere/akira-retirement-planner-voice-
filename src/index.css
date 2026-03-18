@@ -13,4 +13,6 @@ body {
   background-color: var(--color-warm-white);
   color: #1a1a1a;
   font-family: var(--font-sans);
+  /* Fallback fonts in case Google Fonts fails to load */
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
